@@ -108,7 +108,7 @@ class KafkaController(val config: KafkaConfig,
   val partitionStateMachine: PartitionStateMachine = new ZkPartitionStateMachine(config, stateChangeLogger, controllerContext, zkClient,
     new ControllerBrokerRequestBatch(config, controllerChannelManager, eventManager, controllerContext, stateChangeLogger))
   val topicDeletionManager = new TopicDeletionManager(config, controllerContext, replicaStateMachine,
-    partitionStateMachine, new ControllerDeletionClient(this, zkClient), remoteLogMetadataManager)
+    partitionStateMachine, new ControllerDeletionClient(this, zkClient), time, remoteLogMetadataManager)
 
   private val controllerChangeHandler = new ControllerChangeHandler(eventManager)
   private val brokerChangeHandler = new BrokerChangeHandler(eventManager)

@@ -19,6 +19,7 @@ package kafka.controller
 import kafka.server.KafkaConfig
 import kafka.utils.Logging
 import kafka.zk.KafkaZkClient
+import org.apache.kafka.common.utils.Time
 import org.apache.kafka.common.{TopicIdPartition, TopicPartition}
 import org.apache.kafka.server.log.remote.storage.{RemoteLogMetadataManager, RemotePartitionDeleteMetadata, RemotePartitionDeleteState}
 
@@ -90,6 +91,7 @@ class TopicDeletionManager(config: KafkaConfig,
                            replicaStateMachine: ReplicaStateMachine,
                            partitionStateMachine: PartitionStateMachine,
                            client: DeletionClient,
+                           time: Time,
                            remoteLogMetadataManager: Option[RemoteLogMetadataManager] = None) extends Logging {
   this.logIdent = s"[Topic Deletion Manager ${config.brokerId}] "
   val isDeleteTopicEnabled: Boolean = config.deleteTopicEnable
@@ -323,7 +325,7 @@ class TopicDeletionManager(config: KafkaConfig,
     remoteLogMetadataManager.foreach( rlmm => {
       allTopicIdPartitions.foreach(tp =>
       rlmm.putRemotePartitionDeleteMetadata(new RemotePartitionDeleteMetadata(tp,
-        RemotePartitionDeleteState.DELETE_PARTITION_MARKED, System.currentTimeMillis(), controllerContext.brokerId)))
+        RemotePartitionDeleteState.DELETE_PARTITION_MARKED, time.milliseconds(), controllerContext.brokerId)))
     })
     if (allTopicsIneligibleForDeletion.nonEmpty) {
       markTopicIneligibleForDeletion(allTopicsIneligibleForDeletion, reason = "offline replicas")
