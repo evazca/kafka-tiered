@@ -42,7 +42,7 @@ public class FileBasedRemoteLogMetadataCache extends RemoteLogMetadataCache {
         snapshotFile = new RemoteLogMetadataSnapshotFile(partitionDir);
 
         try {
-            snapshotFile.read().ifPresent(snapshot -> loadRemoteLogSegmentMetadata(snapshot.remoteLogMetadatas()));
+            snapshotFile.read().ifPresent(snapshot -> loadRemoteLogSegmentMetadata(snapshot.remoteLogMetadataCol()));
         } catch (IOException e) {
             throw new KafkaException(e);
         }

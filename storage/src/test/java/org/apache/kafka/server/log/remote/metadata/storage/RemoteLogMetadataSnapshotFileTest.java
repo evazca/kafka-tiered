@@ -52,7 +52,7 @@ public class RemoteLogMetadataSnapshotFileTest {
 
         // There should be an empty snapshot as the written snapshot did not have any remote log segment metadata.
         Assertions.assertTrue(snapshotFile.read().isPresent());
-        Assertions.assertTrue(snapshotFile.read().get().remoteLogMetadatas().isEmpty());
+        Assertions.assertTrue(snapshotFile.read().get().remoteLogMetadataCol().isEmpty());
     }
 
     @Test
@@ -79,6 +79,6 @@ public class RemoteLogMetadataSnapshotFileTest {
         Assertions.assertTrue(maybeReadSnapshot.isPresent());
 
         Assertions.assertEquals(snapshot, maybeReadSnapshot.get());
-        Assertions.assertEquals(new HashSet<>(snapshot.remoteLogMetadatas()), new HashSet<>(maybeReadSnapshot.get().remoteLogMetadatas()));
+        Assertions.assertEquals(new HashSet<>(snapshot.remoteLogMetadataCol()), new HashSet<>(maybeReadSnapshot.get().remoteLogMetadataCol()));
     }
 }
