@@ -212,7 +212,7 @@ public class HDFSRemoteStorageManagerTest {
         RemoteLogSegmentMetadata metadata = new RemoteLogSegmentMetadata(id,
                 0, 100, 0, 0, 1L, 1000,
                 Collections.singletonMap(0, 0L));
-        String path = baseDir + File.separator + tp + File.separator + uuid;
+        String path = baseDir + File.separator + tp.topicId() + File.separator + tp.topicPartition() + File.separator + uuid;
         assertFalse(hdfs.exists(new Path(path)));
         rsm.deleteLogSegmentData(metadata);
         assertFalse(hdfs.exists(new Path(path)));
@@ -293,7 +293,8 @@ public class HDFSRemoteStorageManagerTest {
                                               TopicIdPartition tp,
                                               Uuid uuid) throws RemoteStorageException, IOException {
         rsm.deleteLogSegmentData(metadata);
-        assertFalse(hdfs.exists(new Path(baseDir + File.separator + tp.toString() + File.separator + uuid)));
+        assertFalse(hdfs.exists(new Path(baseDir + File.separator + tp.topicId() + File.separator +
+                tp.topicPartition() + File.separator + uuid)));
         RemoteStorageException ex = assertThrows(RemoteStorageException.class, () ->
                 rsm.fetchLogSegment(metadata, 0));
         assertEquals("Failed to fetch SEGMENT file from remote storage", ex.getMessage());
