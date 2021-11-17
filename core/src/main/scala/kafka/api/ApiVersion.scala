@@ -121,6 +121,8 @@ object ApiVersion {
     // Adds topic IDs to Fetch requests/responses (KIP-516)
     KAFKA_3_1_IV0,
     // Support for leader recovery for unclean leader election (KIP-704)
+    // Introduce ListOffsets V8 that supports listing offsets by earliest local time stamp,
+    // which is local log start offset. (KIP-405)
     KAFKA_3_2_IV0
   )
 
