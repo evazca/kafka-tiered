@@ -17,9 +17,6 @@
 
 package kafka.server
 
-import java.util.Collections
-import java.util.Optional
-
 import kafka.cluster.BrokerEndPoint
 import kafka.log.remote.RemoteIndexCache.TmpFileSuffix
 import kafka.log.{LeaderOffsetIncremented, LogAppendInfo, UnifiedLog}
@@ -37,12 +34,13 @@ import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.record.MemoryRecords
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.utils.{LogContext, Time}
-import org.apache.kafka.server.common.MetadataVersion._
 import org.apache.kafka.common.{TopicPartition, Uuid}
+import org.apache.kafka.server.common.MetadataVersion._
 import org.apache.kafka.server.log.remote.storage.{RemoteLogSegmentMetadata, RemoteStorageException, RemoteStorageManager}
 
 import java.io.{File, InputStream}
 import java.nio.file.{Files, StandardCopyOption}
+import java.util.{Collections, Optional}
 import scala.collection.{Map, mutable}
 import scala.compat.java8.OptionConverters._
 import scala.jdk.CollectionConverters._
@@ -76,7 +74,8 @@ class ReplicaFetcherThread(name: String,
 
   // Visible for testing
   private[server] val fetchRequestVersion: Short =
-    if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_1_IV0)) 13
+    if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_2_IV1)) 14
+    else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_1_IV0)) 13
     else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_2_7_IV1)) 12
     else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_2_3_IV1)) 11
     else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_2_1_IV2)) 10
@@ -99,7 +98,8 @@ class ReplicaFetcherThread(name: String,
 
   // Visible for testing
   private[server] val listOffsetRequestVersion: Short =
-    if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_0_IV1)) 7
+    if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_2_IV1)) 8
+    else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_0_IV1)) 7
     else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_2_8_IV0)) 6
     else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_2_2_IV1)) 5
     else if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_2_1_IV1)) 4
@@ -243,7 +243,7 @@ class ReplicaFetcherThread(name: String,
   }
 
   override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int): Long = {
-    if (brokerConfig.interBrokerProtocolVersion >= KAFKA_3_1_IV0)
+    if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_2_IV0))
       fetchOffsetFromLeader(topicPartition, currentLeaderEpoch, ListOffsetsRequest.EARLIEST_LOCAL_TIMESTAMP)
     else
       fetchOffsetFromLeader(topicPartition, currentLeaderEpoch, ListOffsetsRequest.EARLIEST_TIMESTAMP)
