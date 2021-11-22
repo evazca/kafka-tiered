@@ -468,7 +468,7 @@ class BrokerServer(
     }
   }
 
-  def shutdown(): Unit = {
+  override def shutdown(): Unit = {
     if (!maybeChangeStatus(STARTED, SHUTTING_DOWN)) return
     try {
       info("shutting down")
