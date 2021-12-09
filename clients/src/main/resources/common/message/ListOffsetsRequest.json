@@ -34,7 +34,7 @@
   // Version 7 enables listing offsets by max timestamp (KIP-734).
   //
   // Version 8 enables listing offsets by local timestamp.
-  // This is the ealiest log start offset i the local log. (KIP-405).
+  // This is the earliest log start offset in the local log. (KIP-405).
   "validVersions": "0-8",
   "flexibleVersions": "6+",
   "fields": [
