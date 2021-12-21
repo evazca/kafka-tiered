@@ -392,7 +392,7 @@ class AbstractFetcherThreadTest {
         super.truncate(topicPartition, truncationState)
       }
 
-      override def fetchEpochEndOffsets(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] =
+      override def fetchEpochEndOffsetsFromLeader(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] =
         throw new UnsupportedOperationException
 
       override protected val isOffsetForLeaderEpochSupported: Boolean = false
@@ -427,7 +427,7 @@ class AbstractFetcherThreadTest {
         super.truncate(topicPartition, truncationState)
       }
 
-      override def fetchEpochEndOffsets(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] =
+      override def fetchEpochEndOffsetsFromLeader(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] =
         throw new UnsupportedOperationException
 
       override def latestEpoch(topicPartition: TopicPartition): Option[Int] = None
@@ -652,10 +652,7 @@ class AbstractFetcherThreadTest {
     val partition = new TopicPartition("topic", 0)
     var isErrorHandled = false
     val fetcher = new MockFetcherThread() {
-      override protected def buildRemoteLogAuxState(topicPartition: TopicPartition,
-                                                    leaderEpoch: Int,
-                                                    fetchOffset: Long,
-                                                    leaderLogStartOffset: Long): Unit = {
+      override protected def buildRemoteLogAuxState(topicPartition: TopicPartition, leaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Unit = {
         isErrorHandled = true
         throw new FencedLeaderEpochException(s"Epoch $leaderEpoch is fenced")
       }
@@ -687,7 +684,7 @@ class AbstractFetcherThreadTest {
     val partition = new TopicPartition("topic", 0)
     var fetchedEarliestOffset = false
     val fetcher = new MockFetcherThread() {
-      override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): Long = {
+      override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
         fetchedEarliestOffset = true
         throw new FencedLeaderEpochException(s"Epoch $leaderEpoch is fenced")
       }
@@ -757,7 +754,7 @@ class AbstractFetcherThreadTest {
     val partition = new TopicPartition("topic", 0)
     val fetcher: MockFetcherThread = new MockFetcherThread {
       val tries = new AtomicInteger(0)
-      override protected def fetchLatestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): Long = {
+      override protected def fetchLatestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
         if (tries.getAndIncrement() == 0)
           throw new UnknownLeaderEpochException("Unexpected leader epoch")
         super.fetchLatestOffsetFromLeader(topicPartition, leaderEpoch)
@@ -851,8 +848,8 @@ class AbstractFetcherThreadTest {
 
     val fetcher = new MockFetcherThread {
       var fetchEpochsFromLeaderOnce = false
-      override def fetchEpochEndOffsets(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
-        val fetchedEpochs = super.fetchEpochEndOffsets(partitions)
+      override def fetchEpochEndOffsetsFromLeader(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
+        val fetchedEpochs = super.fetchEpochEndOffsetsFromLeader(partitions)
         if (!fetchEpochsFromLeaderOnce) {
           // leader epoch changes while fetching epochs from leader
           removePartitions(Set(partition))
@@ -898,8 +895,8 @@ class AbstractFetcherThreadTest {
     val nextLeaderEpochOnFollower = initialLeaderEpochOnFollower + 1
 
     val fetcher = new MockFetcherThread {
-      override def fetchEpochEndOffsets(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
-        val fetchedEpochs = super.fetchEpochEndOffsets(partitions)
+      override def fetchEpochEndOffsetsFromLeader(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
+        val fetchedEpochs = super.fetchEpochEndOffsetsFromLeader(partitions)
         // leader epoch changes while fetching epochs from leader
         // at the same time, the replica fetcher manager removes the partition
         removePartitions(Set(partition))
@@ -936,9 +933,9 @@ class AbstractFetcherThreadTest {
   def testTruncationThrowsExceptionIfLeaderReturnsPartitionsNotRequestedInFetchEpochs(): Unit = {
     val partition = new TopicPartition("topic", 0)
     val fetcher = new MockFetcherThread {
-      override def fetchEpochEndOffsets(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
+      override def fetchEpochEndOffsetsFromLeader(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
         val unrequestedTp = new TopicPartition("topic2", 0)
-        super.fetchEpochEndOffsets(partitions).toMap + (unrequestedTp -> new EpochEndOffset()
+        super.fetchEpochEndOffsetsFromLeader(partitions).toMap + (unrequestedTp -> new EpochEndOffset()
           .setPartition(unrequestedTp.partition)
           .setErrorCode(Errors.NONE.code)
           .setLeaderEpoch(0)
@@ -1297,7 +1294,7 @@ class AbstractFetcherThreadTest {
                                         fetchOffset: Long,
                                         partitionState: PartitionState): Option[FetchResponseData.EpochEndOffset] = {
       lastFetchedEpoch.asScala.flatMap { fetchEpoch =>
-        val epochEndOffset = fetchEpochEndOffsets(
+        val epochEndOffset = fetchEpochEndOffsetsFromLeader(
           Map(topicPartition -> new EpochData()
             .setPartition(topicPartition.partition)
             .setLeaderEpoch(fetchEpoch)))(topicPartition)
@@ -1348,7 +1345,7 @@ class AbstractFetcherThreadTest {
         .setErrorCode(Errors.NONE.code)
     }
 
-    override def fetchEpochEndOffsets(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
+    override def fetchEpochEndOffsetsFromLeader(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
       val endOffsets = mutable.Map[TopicPartition, EpochEndOffset]()
       partitions.forKeyValue { (partition, epochData) =>
         assert(partition.partition == epochData.partition,
@@ -1414,22 +1411,19 @@ class AbstractFetcherThreadTest {
       }
     }
 
-    override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): Long = {
+    override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
       val leaderState = leaderPartitionState(topicPartition)
       checkLeaderEpochAndThrow(leaderEpoch, leaderState)
-      leaderState.localLogStartOffset
+      (leaderState.leaderEpoch, leaderState.localLogStartOffset)
     }
 
-    override protected def fetchLatestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): Long = {
+    override protected def fetchLatestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
       val leaderState = leaderPartitionState(topicPartition)
       checkLeaderEpochAndThrow(leaderEpoch, leaderState)
-      leaderState.logEndOffset
+      (leaderState.leaderEpoch, leaderState.logEndOffset)
     }
 
-    override protected def buildRemoteLogAuxState(topicPartition: TopicPartition,
-                                                  currentLeaderEpoch: Int,
-                                                  fetchOffset: Long,
-                                                  leaderLogStartOffset: Long): Unit = {
+    override protected def buildRemoteLogAuxState(topicPartition: TopicPartition, currentLeaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Unit = {
       truncateFullyAndStartAt(topicPartition, fetchOffset)
       replicaPartitionState(topicPartition).logStartOffset = leaderLogStartOffset
       // skipped building leader epoch cache and producer snapshots as they are not verified.
