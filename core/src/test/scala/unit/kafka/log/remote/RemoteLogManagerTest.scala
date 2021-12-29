@@ -16,9 +16,10 @@
  */
 package kafka.log.remote
 
+import kafka.server.BrokerTopicStats
 import kafka.server.checkpoints.{LeaderEpochCheckpoint, LeaderEpochCheckpointFile}
 import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
-import kafka.utils.TestUtils
+import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.AbstractConfig
 import org.apache.kafka.server.log.remote.storage._
@@ -30,6 +31,10 @@ import java.util.Properties
 import scala.collection.Seq
 
 class RemoteLogManagerTest {
+
+  val brokerId = 0
+  val time = new MockTime()
+  val brokerTopicStats = new BrokerTopicStats
 
   val topicPartition = new TopicPartition("test-topic", 0)
   val logsDir: String = Files.createTempDirectory("kafka-").toString
@@ -59,7 +64,7 @@ class RemoteLogManagerTest {
     val epochs = Seq(EpochEntry(0, 33), EpochEntry(1, 43), EpochEntry(2, 99), EpochEntry(3, 105))
     epochs.foreach(epochEntry => cache.assign(epochEntry.epoch, epochEntry.startOffset))
 
-    val remoteLogManager = new RemoteLogManager(createRLMConfig(), brokerId = 1, logsDir)
+    val remoteLogManager = new RemoteLogManager(brokerId, createRLMConfig(), tp => None, (_, _) => {}, brokerTopicStats, time, logsDir)
 
     val maybeCache = Some(cache)
     var actual = remoteLogManager.getLeaderEpochCheckpoint(maybeCache, startOffset = -1, endOffset = 200).read()
@@ -89,7 +94,7 @@ class RemoteLogManagerTest {
     val epochs = Seq(EpochEntry(0, 33), EpochEntry(1, 43), EpochEntry(2, 99), EpochEntry(3, 105))
     epochs.foreach(epochEntry => cache.assign(epochEntry.epoch, epochEntry.startOffset))
 
-    val remoteLogManager = new RemoteLogManager(createRLMConfig(), brokerId = 1, logsDir)
+    val remoteLogManager = new RemoteLogManager(brokerId, createRLMConfig(), tp => None, (_, _) => {}, brokerTopicStats, time, logsDir)
 
     val tmpFile = TestUtils.tempFile()
     val checkpoint = remoteLogManager.getLeaderEpochCheckpoint(Some(cache), startOffset = -1, endOffset = 200)

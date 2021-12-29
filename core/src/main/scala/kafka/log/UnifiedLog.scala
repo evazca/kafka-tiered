@@ -294,12 +294,21 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   @volatile var partitionMetadataFile : PartitionMetadataFile = null
 
-  //todo-tier it needs to be updated.
-  private val localLogStartOffset: Long = logStartOffset
+  @volatile private var localLogStartOffset: Long = logStartOffset
+
+  @volatile private var highestOffsetWithRemoteIndex: Long = -1L
 
   locally {
     initializePartitionMetadata()
+
+    // Update local-log-start-offset as log-start-offset. Passed log-start-offset is actually the log-start-offset
+    // with in the local log segments.
+    updateLocalLogStartOffset(logStartOffset)
+
+    // Let us update it to handle scenarios in which segments are not yet moved to tiered storage or tiered storage
+    // is disabled.
     updateLogStartOffset(logStartOffset)
+
     maybeIncrementFirstUnstableOffset()
     initializeTopicId()
   }
@@ -615,6 +624,18 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     }
   }
 
+  private def updateLocalLogStartOffset(offset: Long): Unit = {
+    localLogStartOffset = offset
+
+    if (highWatermark < offset) {
+      updateHighWatermark(offset)
+    }
+
+    if (this.recoveryPoint < offset) {
+      localLog.updateRecoveryPoint(offset)
+    }
+  }
+
   private def updateLogStartOffset(offset: Long): Unit = {
     logStartOffset = offset
 
@@ -625,6 +646,17 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     if (localLog.recoveryPoint < offset) {
       localLog.updateRecoveryPoint(offset)
     }
+  }
+
+  def updateLogStartOffsetFromRemoteTier(remoteLogStartOffset: Long): Unit = {
+    if (remoteLogEnabled()) logStartOffset = if (remoteLogStartOffset < 0) localLogStartOffset else remoteLogStartOffset
+    else warn(s"updateLogStartOffsetFromRemoteTier call is ignored as remoteLogEnabled is determined to be false.")
+  }
+
+  def updateRemoteIndexHighestOffset(offset: Long): Unit = {
+    if (!remoteLogEnabled())
+      warn(s"Received update for highest offset with remote index as: $offset, the existing value: $highestOffsetWithRemoteIndex")
+    else if (offset > highestOffsetWithRemoteIndex) highestOffsetWithRemoteIndex = offset
   }
 
   // Rebuild producer state until lastOffset. This method may be called from the recovery code path, and thus must be

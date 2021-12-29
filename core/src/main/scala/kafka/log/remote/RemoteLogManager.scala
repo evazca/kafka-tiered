@@ -17,26 +17,24 @@
 package kafka.log.remote
 
 import kafka.cluster.Partition
+import kafka.log.UnifiedLog
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.KafkaConfig
-import kafka.server.checkpoints.{LeaderEpochCheckpoint, LeaderEpochCheckpointFile}
-import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
+import kafka.server.checkpoints.InMemoryLeaderEpochCheckpoint
+import kafka.server.epoch.LeaderEpochFileCache
+import kafka.server.{BrokerTopicStats, KafkaConfig}
 import kafka.utils.Logging
 import org.apache.kafka.common._
 import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
 import org.apache.kafka.common.record.{RecordBatch, RemoteLogInputStream}
-import org.apache.kafka.common.utils.{ChildFirstClassLoader, Utils}
-import org.apache.kafka.server.common.CheckpointFile.CheckpointWriteBuffer
+import org.apache.kafka.common.utils.{ChildFirstClassLoader, Time, Utils}
 import org.apache.kafka.server.log.remote.metadata.storage.ClassLoaderAwareRemoteLogMetadataManager
 import org.apache.kafka.server.log.remote.storage.{RemoteLogManagerConfig, RemoteLogMetadataManager, RemoteLogSegmentMetadata, RemoteStorageManager}
 
 import java.io._
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
 import java.security.{AccessController, PrivilegedAction}
 import java.util
 import java.util.Optional
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Future, TimeUnit}
 import scala.collection.Set
 import scala.jdk.CollectionConverters._
 
@@ -50,19 +48,46 @@ import scala.jdk.CollectionConverters._
  * @param brokerId
  * @param logDir
  */
-class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
-                       brokerId: Int,
+class RemoteLogManager(brokerId: Int,
+                       rlmConfig: RemoteLogManagerConfig,
+                       fetchLog: TopicPartition => Option[UnifiedLog],
+                       updateRemoteLogStartOffset: (TopicPartition, Long) => Unit,
+                       brokerTopicStats: BrokerTopicStats,
+                       time: Time = Time.SYSTEM,
                        logDir: String) extends Logging with Closeable with KafkaMetricsGroup {
 
   // topic ids received on leadership changes
   private val topicPartitionIds: ConcurrentMap[TopicPartition, Uuid] = new ConcurrentHashMap[TopicPartition, Uuid]()
 
-  private val remoteLogStorageManager: RemoteStorageManager = createRemoteStorageManager()
+  private val remoteStorageManager: RemoteStorageManager = createRemoteStorageManager()
   private val remoteLogMetadataManager: RemoteLogMetadataManager = createRemoteLogMetadataManager()
 
-  private val indexCache = new RemoteIndexCache(remoteStorageManager = remoteLogStorageManager, logDir = logDir)
+  private val indexCache = new RemoteIndexCache(remoteStorageManager = remoteStorageManager, logDir = logDir)
 
   private var closed = false
+  private val leaderOrFollowerTasks: ConcurrentHashMap[TopicIdPartition, RLMTaskWithFuture] =
+    new ConcurrentHashMap[TopicIdPartition, RLMTaskWithFuture]()
+
+  private val delayInMs = rlmConfig.remoteLogManagerTaskIntervalMs
+  private val poolSize = rlmConfig.remoteLogManagerThreadPoolSize
+  private val rlmScheduledThreadPool = new RLMScheduledThreadPool(poolSize)
+
+  private[remote] def rlmScheduledThreadPoolSize: Int = rlmScheduledThreadPool.poolSize()
+
+  private[remote] def leaderOrFollowerTasksSize: Int = leaderOrFollowerTasks.size()
+
+  private def doHandleLeaderOrFollowerPartitions(topicPartition: TopicIdPartition,
+                                                 convertToLeaderOrFollower: RLMTask => Unit): Unit = {
+    val rlmTaskWithFuture = leaderOrFollowerTasks.computeIfAbsent(topicPartition, (tp: TopicIdPartition) => {
+      val task = new RLMTask(brokerId, tp, fetchLog, updateRemoteLogStartOffset, time, brokerTopicStats, remoteStorageManager, remoteLogMetadataManager)
+      // Set this upfront when it is getting initialized instead of doing it after scheduling.
+      convertToLeaderOrFollower(task)
+      info(s"Created a new task: $task and getting scheduled")
+      val future = rlmScheduledThreadPool.scheduleWithFixedDelay(task, 0, delayInMs, TimeUnit.MILLISECONDS)
+      RLMTaskWithFuture(task, future)
+    })
+    convertToLeaderOrFollower(rlmTaskWithFuture.rlmTask)
+  }
 
   private[remote] def createRemoteStorageManager(): RemoteStorageManager = {
     def createDelegate(classLoader: ClassLoader): RemoteStorageManager = {
@@ -74,13 +99,13 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
       private val classPath = rlmConfig.remoteStorageManagerClassPath()
 
       override def run(): RemoteStorageManager = {
-          if (classPath != null && classPath.trim.nonEmpty) {
-            val classLoader = new ChildFirstClassLoader(classPath, this.getClass.getClassLoader)
-            val delegate = createDelegate(classLoader)
-            new ClassLoaderAwareRemoteStorageManager(delegate, classLoader)
-          } else {
-            createDelegate(this.getClass.getClassLoader)
-          }
+        if (classPath != null && classPath.trim.nonEmpty) {
+          val classLoader = new ChildFirstClassLoader(classPath, this.getClass.getClassLoader)
+          val delegate = createDelegate(classLoader)
+          new ClassLoaderAwareRemoteStorageManager(delegate, classLoader)
+        } else {
+          createDelegate(this.getClass.getClassLoader)
+        }
       }
     })
   }
@@ -89,7 +114,7 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
     val rsmProps = new util.HashMap[String, Any]()
     rlmConfig.remoteStorageManagerProps().asScala.foreach { case (k, v) => rsmProps.put(k, v) }
     rsmProps.put(KafkaConfig.BrokerIdProp, brokerId)
-    remoteLogStorageManager.configure(rsmProps)
+    remoteStorageManager.configure(rsmProps)
   }
 
   private[remote] def createRemoteLogMetadataManager(): RemoteLogMetadataManager = {
@@ -131,7 +156,7 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
   }
 
   def storageManager(): RemoteStorageManager = {
-    remoteLogStorageManager
+    remoteStorageManager
   }
 
   /**
@@ -146,23 +171,40 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
   def onLeadershipChange(partitionsBecomeLeader: Set[Partition],
                          partitionsBecomeFollower: Set[Partition],
                          topicIds: util.Map[String, Uuid]): Unit = {
-    debug(s"Received leadership changes for leaders: $partitionsBecomeLeader and followers: $partitionsBecomeFollower")
+    trace(s"Received leadership changes for partitionsBecomeLeader: $partitionsBecomeLeader " +
+      s"and partitionsBecomeLeader: $partitionsBecomeLeader")
 
-    // Partitions logs are available when this callback is invoked.
-    // Compact topics and internal topics are filtered here as they are not supported with tiered storage.
-    def filterPartitions(partitions: Set[Partition]): Set[TopicIdPartition] = {
-      // We are not specifically checking for internal topics etc here as `log.remoteLogEnabled()` already handles that.
-      partitions.filter(partition => partition.log.exists(log => log.remoteLogEnabled()))
-        .map(partition => new TopicIdPartition(topicIds.get(partition.topic), partition.topicPartition))
+    def remoteLogEnabled(partition: Partition): Boolean = {
+      partition.log.exists(log => log.remoteLogEnabled())
     }
 
-    val followerTopicPartitions = filterPartitions(partitionsBecomeFollower)
-    val leaderTopicPartitions = filterPartitions(partitionsBecomeLeader)
-    debug(s"Effective topic partitions after filtering compact and internal topics, leaders: $leaderTopicPartitions " +
-      s"and followers: $followerTopicPartitions")
+    val leaderPartitionWithEpochs = partitionsBecomeLeader.filterNot(remoteLogEnabled)
+      .map(partition => {
+        val topicId = topicIds.get(partition.topic)
+        topicPartitionIds.put(partition.topicPartition, topicId)
+        new TopicIdPartition(topicId, partition.topicPartition) -> partition.getLeaderEpoch
+      }).toMap
 
-    if (leaderTopicPartitions.nonEmpty || followerTopicPartitions.nonEmpty) {
-      remoteLogMetadataManager.onPartitionLeadershipChanges(leaderTopicPartitions.asJava, followerTopicPartitions.asJava)
+    val followerPartitions = partitionsBecomeFollower.filterNot(remoteLogEnabled)
+      .map(partition => {
+        val topicId = topicIds.get(partition.topic)
+        topicPartitionIds.put(partition.topicPartition, topicId)
+        new TopicIdPartition(topicId, partition.topicPartition)
+      })
+
+    if (leaderPartitionWithEpochs.nonEmpty || followerPartitions.nonEmpty) {
+      debug(s"Effective topic partitions after filtering compact and internal topics, " +
+        s"leaders: ${leaderPartitionWithEpochs.keySet} and followers: $followerPartitions")
+      remoteLogMetadataManager.onPartitionLeadershipChanges(leaderPartitionWithEpochs.keySet.asJava, followerPartitions.asJava)
+
+      followerPartitions.foreach {
+        topicIdPartition => doHandleLeaderOrFollowerPartitions(topicIdPartition, _.convertToFollower())
+      }
+
+      leaderPartitionWithEpochs.foreach {
+        case (topicIdPartition, leaderEpoch) =>
+          doHandleLeaderOrFollowerPartitions(topicIdPartition, _.convertToLeader(leaderEpoch))
+      }
     }
   }
 
@@ -199,7 +241,7 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
     var remoteSegInputStream: InputStream = null
     try {
       // Search forward for the position of the last offset that is greater than or equal to the target offset
-      remoteSegInputStream = remoteLogStorageManager.fetchLogSegment(rlsMetadata, startPos)
+      remoteSegInputStream = remoteStorageManager.fetchLogSegment(rlsMetadata, startPos)
       val remoteLogInputStream = new RemoteLogInputStream(remoteSegInputStream)
       var batch: RecordBatch = null
 
@@ -255,8 +297,9 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
     if (topicId == null) {
       throw new KafkaException("Topic id does not exist for topic partition: " + tp)
     }
+
     // Get the respective epoch in which the starting offset exists.
-    var maybeEpoch = leaderEpochCache.epochForOffset(startingOffset);
+    var maybeEpoch = leaderEpochCache.epochForOffset(startingOffset)
     while (maybeEpoch.nonEmpty) {
       remoteLogMetadataManager.listRemoteLogSegments(new TopicIdPartition(topicId, tp), maybeEpoch.get).asScala
         .foreach(rlsMetadata =>
@@ -275,11 +318,12 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
 
   /**
    * Returns the leader epoch checkpoint by truncating with the given start(exclusive) and end(inclusive) offset
+   *
    * @param leaderEpochCache leader-epoch checkpoint cache.
-   * @param startOffset The start offset of the checkpoint file (exclusive in the truncation).
-   *                    If start offset is 6, then it will retain an entry at offset 6.
-   * @param endOffset   The end offset of the checkpoint file (inclusive in the truncation)
-   *                    If end offset is 100, then it will remove the entries greater than or equal to 100.
+   * @param startOffset      The start offset of the checkpoint file (exclusive in the truncation).
+   *                         If start offset is 6, then it will retain an entry at offset 6.
+   * @param endOffset        The end offset of the checkpoint file (inclusive in the truncation)
+   *                         If end offset is 100, then it will remove the entries greater than or equal to 100.
    * @return the truncated leader epoch checkpoint
    */
   private[remote] def getLeaderEpochCheckpoint(leaderEpochCache: Option[LeaderEpochFileCache], startOffset: Long, endOffset: Long): InMemoryLeaderEpochCheckpoint = {
@@ -295,34 +339,38 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
     checkpoint
   }
 
-  class InMemoryLeaderEpochCheckpoint extends LeaderEpochCheckpoint {
-    private var epochs: Seq[EpochEntry] = Seq()
-    override def write(epochs: Iterable[EpochEntry]): Unit = this.epochs = epochs.toSeq
-    override def read(): Seq[EpochEntry] = this.epochs
-
-    def readAsByteBuffer(): ByteBuffer = {
-      val stream = new ByteArrayOutputStream()
-      val writer = new BufferedWriter(new OutputStreamWriter(stream, StandardCharsets.UTF_8))
-      val writeBuffer = new CheckpointWriteBuffer[EpochEntry](writer, 0, LeaderEpochCheckpointFile.Formatter)
-      try {
-        writeBuffer.write(epochs.asJava)
-        writer.flush()
-        ByteBuffer.wrap(stream.toByteArray)
-      } finally {
-        writer.close()
+  /**
+   * Stops all the threads and releases all the resources like RemoterStorageManager and RemoteLogMetadataManager.
+   */
+  def close(): Unit = {
+    if (closed)
+      warn("Trying to close an already closed RemoteLogManager")
+    else this synchronized {
+      // Write lock is not taken when closing this class. As, the read lock is held by other threads which might be
+      // waiting on the producer future (or) trying to consume the metadata record for strong consistency.
+      if (!closed) {
+        // During segment copy, the RLM task publishes an event and tries to consume the same for strong consistency.
+        // The active RLM task might be waiting on the producer future (or) trying to consume the record.
+        // So, tasks should be cancelled first, close the RLMM, RSM, then shutdown the thread pool to close the active
+        // tasks.
+        leaderOrFollowerTasks.values().forEach(_.cancel())
+        Utils.closeQuietly(remoteLogMetadataManager, "RemoteLogMetadataManager")
+        Utils.closeQuietly(remoteStorageManager, "RemoteLogMetadataManager")
+        rlmScheduledThreadPool.shutdown()
+        leaderOrFollowerTasks.clear()
+        closed = true
       }
     }
   }
 
-  /**
-   * Closes and releases all the resources like RemoterStorageManager and RemoteLogMetadataManager.
-   */
-  def close(): Unit = {
-    this synchronized {
-      if (!closed) {
-        Utils.closeQuietly(remoteLogStorageManager, "RemoteLogStorageManager")
-        Utils.closeQuietly(remoteLogMetadataManager, "RemoteLogMetadataManager")
-        closed = true
+  case class RLMTaskWithFuture(rlmTask: RLMTask, future: Future[_]) {
+
+    def cancel(): Unit = {
+      rlmTask.cancel()
+      try {
+        future.cancel(true)
+      } catch {
+        case ex: Exception => error(s"Error occurred while canceling the task: $rlmTask", ex)
       }
     }
   }

@@ -42,7 +42,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol
 import org.apache.kafka.common.security.scram.internals.ScramMechanism
 import org.apache.kafka.common.security.token.delegation.internals.DelegationTokenCache
 import org.apache.kafka.common.utils.{AppInfoParser, LogContext, Time, Utils}
-import org.apache.kafka.common.{ClusterResource, Endpoint, KafkaException}
+import org.apache.kafka.common.{ClusterResource, Endpoint, KafkaException, TopicPartition}
 import org.apache.kafka.metadata.{BrokerState, VersionRange}
 import org.apache.kafka.raft.RaftConfig.AddressSpec
 import org.apache.kafka.raft.{RaftClient, RaftConfig}
@@ -453,7 +453,14 @@ class BrokerServer(
         throw new KafkaException("Tiered storage is not supported with multiple log dirs.");
       }
 
-      Some(new RemoteLogManager(remoteLogManagerConfig, config.brokerId, config.logDirs.head))
+      def updateRemoteLogStartOffset(tp: TopicPartition, remoteLogStartOffset: Long) : Unit = {
+        logManager.getLog(tp).foreach(log => {
+          log.updateLogStartOffsetFromRemoteTier(remoteLogStartOffset)
+        })
+      }
+
+      Some(new RemoteLogManager(config.brokerId, remoteLogManagerConfig, tp => logManager.getLog(tp),
+        updateRemoteLogStartOffset, brokerTopicStats, time,config.logDirs.head))
     } else {
       None
     }
