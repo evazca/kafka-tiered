@@ -186,6 +186,11 @@ object LogLoader extends Logging {
     }
 
     params.leaderEpochCache.foreach(_.truncateFromEnd(nextOffset))
+    // todo-tier check for remote storage.
+    //  If yes
+    //      - set newLogStartOffset as logStartOffsetCheckpoint only
+    //  If no
+    //      - go with the old logic of math.max(params.logStartOffsetCheckpoint, params.segments.firstSegment.get.baseOffset)
     val newLogStartOffset = math.max(params.logStartOffsetCheckpoint, params.segments.firstSegment.get.baseOffset)
     // The earliest leader epoch may not be flushed during a hard failure. Recover it here.
     params.leaderEpochCache.foreach(_.truncateFromStart(params.logStartOffsetCheckpoint))

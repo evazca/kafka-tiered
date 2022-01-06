@@ -294,8 +294,10 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   @volatile var partitionMetadataFile : PartitionMetadataFile = null
 
+  // This is the start offset of the earliest log segments.
   @volatile private var localLogStartOffset: Long = logStartOffset
 
+  // This is maintained to make sure the local log segments are not deleted before the segments are copied to remote storage.
   @volatile private var highestOffsetWithRemoteIndex: Long = -1L
 
   locally {
@@ -305,8 +307,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     // with in the local log segments.
     updateLocalLogStartOffset(logStartOffset)
 
-    // Let us update it to handle scenarios in which segments are not yet moved to tiered storage or tiered storage
-    // is disabled.
     updateLogStartOffset(logStartOffset)
 
     maybeIncrementFirstUnstableOffset()

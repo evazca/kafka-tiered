@@ -43,14 +43,8 @@ class RLMTask(brokerId: Int,
 
   private def isLeader(): Boolean = leaderEpoch >= 0
 
-  // This is found by traversing from the latest leader epoch from leader epoch history and find the highest offset
-  // of a segment with that epoch copied into remote storage. If it can not find an entry then it checks for the
-  // previous leader epoch till it finds an entry, If there are no entries till the earliest leader epoch in leader
-  // epoch cache then it starts copying the segments from the earliest epoch entry’s offset.
+  // This offset represents the highest offset that is copied to remote storage.
   private var readOffset: Long = -1
-
-  //todo-updating log with remote index highest offset -- should this be required?
-  // fetchLog(tp.topicPartition()).foreach { log => log.updateRemoteIndexHighestOffset(readOffset) }
 
   def convertToLeader(leaderEpochVal: Int): Unit = {
     if (leaderEpochVal < 0) {
@@ -63,7 +57,13 @@ class RLMTask(brokerId: Int,
     }
   }
 
-  def findHighestRemoteOffset(topicIdPartition: TopicIdPartition): Optional[lang.Long] = {
+  /**
+   * This is found by traversing from the latest leader epoch from leader epoch history and find the highest offset
+   * of a segment with that epoch copied into remote storage. If it can not find an entry then it checks for the
+   * previous leader epoch till it finds an entry, If there are no entries till the earliest leader epoch in leader
+   * epoch cache then it starts copying the segments from the earliest epoch entry’s offset.
+   */
+  private def findHighestRemoteOffset(topicIdPartition: TopicIdPartition): Optional[lang.Long] = {
     var offset: Optional[lang.Long] = Optional.empty()
     fetchLog(topicIdPartition.topicPartition()).foreach { log =>
       log.leaderEpochCache.foreach(cache => {
@@ -99,27 +99,29 @@ class RLMTask(brokerId: Int,
         } else if (lso > 0 && readOffset < lso) {
           // Copy segments only till the min of high-watermark or stable-offset
           // Remote storage should contain only committed/acked messages
-          val fetchOffset = lso
-          debug(s"Checking for segments to copy, readOffset: $readOffset and fetchOffset: $fetchOffset")
+          debug(s"Checking for segments to copy, readOffset: $readOffset and fetchOffset: $lso")
           val activeSegBaseOffset = log.activeSegment.baseOffset
-          val sortedSegments = log.logSegments(readOffset + 1, fetchOffset).toList.sortBy(_.baseOffset)
+          // Get the segments from readOffset+1 (including), and lso(excluding) and sort them based on segment's baseOffset.
+          val sortedSegments = log.logSegments(readOffset + 1, lso).toList.sortBy(_.baseOffset)
           sortedSegments.foreach { segment =>
             // Return immediately if this task is cancelled or this is not-a-leader or current segment is active.
+            // We do not copy the active segment.
             if (isCancelled() || !isLeader() || segment.baseOffset >= activeSegBaseOffset) {
               info(s"Skipping copying log segments as the current task state is changed, cancelled: " +
                 s"${isCancelled()} leader:${isLeader()} segment's base offset: ${segment.baseOffset} and active segment offset: ${activeSegBaseOffset}")
               return
             }
 
-            val logFile = segment.log.file()
-            val fileName = logFile.getName
+            val logFilePath = segment.log.file().toPath
+            val fileName = logFilePath.getFileName
             info(s"Copying $fileName to remote storage.")
             val id = new RemoteLogSegmentId(topicIdPartition, Uuid.randomUuid())
 
             val nextOffset = segment.readNextOffset
-            //todo-tier double check on this
             val endOffset = nextOffset - 1
-            val producerIdSnapshotFile = log.producerStateManager.fetchSnapshot(nextOffset).orNull
+            val producerIdSnapshotFilePath = log.producerStateManager.fetchSnapshot(nextOffset)
+              .getOrElse(throw new KafkaException("No producer-state-snapshot file exists for offset: " + nextOffset))
+              .toPath
 
             def createLeaderEpochs(): ByteBuffer = {
               val inMemoryLeaderEpochCheckpoint = new InMemoryLeaderEpochCheckpoint()
@@ -133,17 +135,19 @@ class RLMTask(brokerId: Int,
             }
 
             def createLeaderEpochEntries(startOffset: Long): Option[collection.Seq[EpochEntry]] = {
-              val maybeLeaderEpochCheckpoint = {
-                val inMemoryLeaderEpochCheckpoint = new InMemoryLeaderEpochCheckpoint()
-                log.leaderEpochCache
-                  .map(cache => cache.writeTo(inMemoryLeaderEpochCheckpoint))
-                  .map(x => {
-                    x.truncateFromStart(startOffset)
-                    x.truncateFromEnd(nextOffset)
-                    inMemoryLeaderEpochCheckpoint
-                  })
-              }
-              maybeLeaderEpochCheckpoint.map(x => x.read())
+              val inMemoryLeaderEpochCheckpoint = new InMemoryLeaderEpochCheckpoint()
+              log.leaderEpochCache
+                // Write the existing epochs into inMemoryLeaderEpochCheckpoint
+                .map(cache => cache.writeTo(inMemoryLeaderEpochCheckpoint))
+                .map(x => {
+                  // Truncate the inMemoryLeaderEpochCheckpoint cache
+                  x.truncateFromStart(startOffset)
+                  x.truncateFromEnd(nextOffset)
+                  // Return inMemoryLeaderEpochCheckpoint
+                  inMemoryLeaderEpochCheckpoint
+                })
+                // Read the entries and return them.
+                .map(cache => cache.read())
             }
 
             val leaderEpochs = createLeaderEpochs()
@@ -162,9 +166,11 @@ class RLMTask(brokerId: Int,
 
             remoteLogMetadataManager.addRemoteLogSegmentMetadata(remoteLogSegmentMetadata)
 
-            val segmentData = new LogSegmentData(logFile.toPath, segment.lazyOffsetIndex.get.path,
-              segment.lazyTimeIndex.get.path, Optional.ofNullable(segment.txnIndex.path),
-              producerIdSnapshotFile.toPath, leaderEpochs)
+            // We do not really need to load the offset and time indexes as memory mapped files as it is read only
+            // once here to copy them to tiered storage.
+            val segmentData = new LogSegmentData(logFilePath, segment.lazyOffsetIndex.file.toPath,
+              segment.lazyTimeIndex.file.toPath, Optional.ofNullable(segment.txnIndex.path),
+              producerIdSnapshotFilePath, leaderEpochs)
             remoteStorageManager.copyLogSegmentData(remoteLogSegmentMetadata, segmentData)
 
             val rlsmAfterCreate = new RemoteLogSegmentMetadataUpdate(id, time.milliseconds(),
@@ -174,7 +180,6 @@ class RLMTask(brokerId: Int,
             brokerTopicStats.topicStats(topicIdPartition.topicPartition().topic())
               .remoteBytesOutRate.mark(remoteLogSegmentMetadata.segmentSizeInBytes())
             readOffset = endOffset
-            //todo-tier-storage
             log.updateRemoteIndexHighestOffset(readOffset)
             info(s"Copied $fileName to remote storage with segment-id: ${rlsmAfterCreate.remoteLogSegmentId()}")
           }
@@ -276,8 +281,9 @@ class RLMTask(brokerId: Int,
       }
     } catch {
       case ex: Exception =>
-        if (!isCancelled())
+        if (!isCancelled()) {
           error(s"Error while cleaning up log segments for partition: $topicIdPartition", ex)
+        }
     }
   }
 
@@ -311,6 +317,7 @@ class RLMTask(brokerId: Int,
         // We do not need any cleanup on followers from remote segments perspective.
         handleExpiredRemoteLogSegments()
       } else {
+        // todo-tier Is this really needed? Can we get this from leader partition as part of follower fetch logic.
         val offset = findHighestRemoteOffset(topicIdPartition)
         if (offset.isPresent) {
           fetchLog(topicIdPartition.topicPartition()).foreach { log =>
@@ -319,12 +326,9 @@ class RLMTask(brokerId: Int,
         }
       }
     } catch {
-      case ex: InterruptedException =>
-        if (!isCancelled())
-          warn(s"Current thread for topic-partition $topicIdPartition is interrupted, this should not be rescheduled ", ex)
       case ex: Exception =>
         if (!isCancelled())
-          warn(s"Current task for topic-partition $topicIdPartition received error but it will be scheduled for next iteration: ", ex)
+          warn(s"Current task for topic-partition $topicIdPartition received error", ex)
     }
   }
 
