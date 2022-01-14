@@ -33,12 +33,12 @@ import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.record.MemoryRecords
 import org.apache.kafka.common.requests._
-import org.apache.kafka.common.utils.{LogContext, Time}
+import org.apache.kafka.common.utils.{LogContext, Time, Utils}
 import org.apache.kafka.common.{KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.server.common.CheckpointFile.CheckpointReadBuffer
 import org.apache.kafka.server.log.remote.storage.{RemoteStorageException, RemoteStorageManager}
 
-import java.io.{BufferedReader, InputStream, InputStreamReader}
+import java.io.{BufferedReader, File, InputStream, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, StandardCopyOption}
 import java.util.{Collections, Optional}
@@ -218,7 +218,6 @@ class ReplicaFetcherThread(name: String,
         "equal or larger than your settings for max.message.bytes, both at a broker and topic level.")
   }
 
-
   override protected def fetchFromLeader(fetchRequest: FetchRequest.Builder): Map[TopicPartition, FetchData] = {
     val clientResponse = try {
       leaderEndpoint.sendRequest(fetchRequest)
@@ -229,11 +228,8 @@ class ReplicaFetcherThread(name: String,
     }
     val fetchResponse = clientResponse.responseBody.asInstanceOf[FetchResponse]
     if (!fetchSessionHandler.handleResponse(fetchResponse, clientResponse.requestHeader().apiVersion())) {
-      // If we had a session topic ID related error or unknown topic id or inconsistent topic id, throw it,
-      // otherwise return an empty fetch data map.
-      if (fetchResponse.error == Errors.UNKNOWN_TOPIC_ID ||
-        fetchResponse.error == Errors.FETCH_SESSION_TOPIC_ID_ERROR ||
-        fetchResponse.error == Errors.INCONSISTENT_TOPIC_ID) {
+      // If we had a session topic ID related error, throw it, otherwise return an empty fetch data map.
+      if (fetchResponse.error == Errors.FETCH_SESSION_TOPIC_ID_ERROR) {
         throw Errors.forCode(fetchResponse.error().code()).exception()
       } else {
         Map.empty
@@ -437,20 +433,32 @@ class ReplicaFetcherThread(name: String,
       if (log.remoteStorageSystemEnable && log.config.remoteLogConfig.remoteStorageEnable) {
         replicaMgr.remoteLogManager.foreach { rlm =>
 
-          // Find the respective leader epoch for (leaderLogStartOffset - 1)
-          val highestOffsetInRemoteFromLeader = leaderLogStartOffset - 1
+          // Find the respective leader epoch for (leaderLocalLogStartOffset - 1). We need to build the leader epoch cache
+          // until that offset
+          val highestOffsetInRemoteFromLeader = leaderLocalLogStartOffset - 1
           val targetEpoch: Int = {
             // If the existing epoch is 0, no need to fetch from earlier epoch as the desired offset(leaderLogStartOffset - 1)
             // will have the same epoch.
-            if(epochForLeaderLocalLogStartOffset == 0) {
+            if (epochForLeaderLocalLogStartOffset == 0) {
               epochForLeaderLocalLogStartOffset
             } else {
-              // Fetch the earlier epoch/end-offset from the leader.
+              // Fetch the earlier epoch/end-offset(exclusive) from the leader.
               val earlierEpochEndOffset = fetchEarlierEpochEndOffset(epochForLeaderLocalLogStartOffset)
-              // Check if the target offset lies with in the range of earlier epoch
-              if (earlierEpochEndOffset.endOffset >= highestOffsetInRemoteFromLeader)
-                earlierEpochEndOffset.leaderEpoch() // This gives the respective leader epoch, will handle any gaps in epochs
-              else epochForLeaderLocalLogStartOffset
+              // Check if the target offset lies with in the range of earlier epoch. Here, epoch's end-offset is exclusive.
+              if (earlierEpochEndOffset.endOffset > highestOffsetInRemoteFromLeader) {
+                // Always use the leader epoch from returned earlierEpochEndOffset. This gives the respective leader
+                // epoch, that will handle any gaps in epochs.
+                // For ex:
+                //  0 		20
+                //  1 		85
+                //  <2> - gap no messages were appended in this leader epoch.
+                //  3 		90
+                //  4 		98
+                // There is a gap in leader epoch. For leaderLocalLogStartOffset as 85, leader-epoch is 3.
+                // fetchEarlierEpochEndOffset(3) will return leader-epoch as 1, end-offset as 85.
+                // So, we should use leader-epoch as 1, for offset 84.
+                earlierEpochEndOffset.leaderEpoch()
+              } else epochForLeaderLocalLogStartOffset
             }
           }
 
@@ -465,15 +473,20 @@ class ReplicaFetcherThread(name: String,
 
             log.maybeIncrementLogStartOffset(leaderLogStartOffset, LeaderOffsetIncremented)
             epochs.foreach { epochEntry =>
-              log.leaderEpochCache.map(cache => cache.assign(epochEntry.epoch, epochEntry.startOffset))
+              log.leaderEpochCache.foreach(cache => cache.assign(epochEntry.epoch, epochEntry.startOffset))
             }
             info(s"Updated the epoch cache from remote tier till offset: $leaderLocalLogStartOffset " +
               s"with size: ${epochs.size} for $partition")
 
             // Restore producer snapshot
             val snapshotFile = UnifiedLog.producerSnapshotFile(log.dir, leaderLocalLogStartOffset)
+            val tmpSnapshotFile = new File(snapshotFile.getAbsolutePath + ".tmp");
+            // Copy it to snapshot file in atomic manner.
             Files.copy(rlm.storageManager().fetchIndex(rlsMetadata.get(), RemoteStorageManager.IndexType.PRODUCER_SNAPSHOT),
-              snapshotFile.toPath, StandardCopyOption.REPLACE_EXISTING)
+              tmpSnapshotFile.toPath, StandardCopyOption.REPLACE_EXISTING)
+            Utils.atomicMoveWithFallback(tmpSnapshotFile.toPath, snapshotFile.toPath, false)
+
+            // Reload producer snapshots.
             log.producerStateManager.reloadSnapshots()
             log.loadProducerState(leaderLocalLogStartOffset, reloadFromCleanShutdown = false)
             info(s"Built the leader epoch cache and producer snapshots from remote tier for $partition. " +
