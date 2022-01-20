@@ -115,8 +115,8 @@ public final class LocalTieredStorageEvent implements Comparable<LocalTieredStor
 
     @Override
     public String toString() {
-        return format("LocalTieredStorageEvent[type=%s brokerId=%s segmentId=%s timestamp=%s",
-                type, segmentId, timestamp);
+        return format("LocalTieredStorageEvent[type=%s brokerId=%s segmentId=%s timestamp=%s exception=%s",
+                type, brokerId, segmentId, timestamp, exception);
     }
 
     private LocalTieredStorageEvent(final Builder builder) {

@@ -48,4 +48,6 @@ public abstract class RemotePartitionMetadataEventHandler {
                                                  int metadataPartition,
                                                  long metadataPartitionOffset) throws IOException;
 
+    public abstract void markInitialized(TopicIdPartition partition);
+
 }

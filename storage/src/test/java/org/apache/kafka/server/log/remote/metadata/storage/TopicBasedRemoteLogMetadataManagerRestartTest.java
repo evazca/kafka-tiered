@@ -121,9 +121,8 @@ public class TopicBasedRemoteLogMetadataManagerRestartTest {
         // Stop TopicBasedRemoteLogMetadataManager only.
         stopTopicBasedRemoteLogMetadataManagerHarness();
 
-        // Start TopicBasedRemoteLogMetadataManager but do not start consumer thread to check whether the stored metadata is
-        // loaded successfully or not.
-        startTopicBasedRemoteLogMetadataManagerHarness(false);
+        // Start TopicBasedRemoteLogMetadataManager
+        startTopicBasedRemoteLogMetadataManagerHarness(true);
 
         // Register these partitions to RLMM, which loads the respective metadata snapshots.
         topicBasedRlmm().onPartitionLeadershipChanges(Collections.singleton(leaderTopicIdPartition), Collections.singleton(followerTopicIdPartition));
@@ -133,9 +132,6 @@ public class TopicBasedRemoteLogMetadataManagerRestartTest {
                                                                  topicBasedRlmm().listRemoteLogSegments(leaderTopicIdPartition)));
         Assertions.assertTrue(TestUtils.sameElementsWithoutOrder(Collections.singleton(followerSegmentMetadata).iterator(),
                                                                  topicBasedRlmm().listRemoteLogSegments(followerTopicIdPartition)));
-
-        // Start Consumer thread
-        topicBasedRlmm().startConsumerThread();
 
         // Add one more segment
         RemoteLogSegmentMetadata leaderSegmentMetadata2 = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),

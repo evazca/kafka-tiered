@@ -36,6 +36,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * This class provides an in-memory cache of remote log segment metadata. This maintains the lineage of segments
@@ -107,6 +108,16 @@ public class RemoteLogMetadataCache {
     // later. We will look into it when we integrate these APIs along with RemoteLogManager changes.
     // https://issues.apache.org/jira/browse/KAFKA-12641
     private final ConcurrentMap<Integer, RemoteLogLeaderEpochState> leaderEpochEntries = new ConcurrentHashMap<>();
+
+    private final CountDownLatch initializedLatch = new CountDownLatch(1);
+
+    public void markInitialized() {
+        initializedLatch.countDown();
+    }
+
+    public void ensureInitialized() throws InterruptedException {
+        initializedLatch.await();
+    }
 
     /**
      * Returns {@link RemoteLogSegmentMetadata} if it exists for the given leader-epoch containing the offset and with
