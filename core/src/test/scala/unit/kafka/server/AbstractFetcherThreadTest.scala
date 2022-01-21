@@ -651,7 +651,7 @@ class AbstractFetcherThreadTest {
     val partition = new TopicPartition("topic", 0)
     var isErrorHandled = false
     val fetcher = new MockFetcherThread() {
-      override protected def buildRemoteLogAuxState(topicPartition: TopicPartition, leaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Unit = {
+      override protected def buildRemoteLogAuxState(topicPartition: TopicPartition, leaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Option[Long] = {
         isErrorHandled = true
         throw new FencedLeaderEpochException(s"Epoch $leaderEpoch is fenced")
       }
@@ -1422,10 +1422,11 @@ class AbstractFetcherThreadTest {
       (leaderState.leaderEpoch, leaderState.logEndOffset)
     }
 
-    override protected def buildRemoteLogAuxState(topicPartition: TopicPartition, currentLeaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Unit = {
+    override protected def buildRemoteLogAuxState(topicPartition: TopicPartition, currentLeaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Option[Long] = {
       truncateFullyAndStartAt(topicPartition, fetchOffset)
       replicaPartitionState(topicPartition).logStartOffset = leaderLogStartOffset
       // skipped building leader epoch cache and producer snapshots as they are not verified.
+      None
     }
 
   }
