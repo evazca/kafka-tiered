@@ -348,6 +348,11 @@ public class ReplicaFetcherThreadBenchmark {
         }
 
         @Override
+        public Tuple2<Object, Object> fetchEarliestLocalOffsetFromLeader(TopicPartition topicPartition, int currentLeaderEpoch) {
+            return Tuple2.apply(0, 0L);
+        }
+
+        @Override
         public Tuple2<Object, Object> fetchEarliestOffsetFromLeader(TopicPartition topicPartition, int currentLeaderEpoch) {
             return Tuple2.apply(0, 0L);
         }
