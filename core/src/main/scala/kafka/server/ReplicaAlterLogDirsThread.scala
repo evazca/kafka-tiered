@@ -161,11 +161,15 @@ class ReplicaAlterLogDirsThread(name: String,
     }
   }
 
-  override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
+  override protected def fetchEarliestLocalOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
     val partition = replicaMgr.getPartitionOrException(topicPartition)
     val log = partition.localLogOrException
     val offset = log.logStartOffset
     doFetchEpochAndOffset(log, offset)
+  }
+
+  override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
+    fetchEarliestLocalOffsetFromLeader(topicPartition, leaderEpoch)
   }
 
   override protected def fetchLatestOffsetFromLeader(topicPartition: TopicPartition, leaderEpoch: Int): (Int, Long) = {
@@ -326,11 +330,13 @@ class ReplicaAlterLogDirsThread(name: String,
     }
   }
 
-  override protected def buildRemoteLogAuxState(partition: TopicPartition, currentLeaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Unit = {
+  override protected def buildRemoteLogAuxState(partition: TopicPartition, currentLeaderEpoch: Int, fetchOffset: Long, epochForFetchOffset: Int, leaderLogStartOffset: Long): Long = {
     // JBOD is not supported with tiered storage.
     truncateFullyAndStartAt(partition, fetchOffset)
     replicaMgr.futureLocalLogOrException(partition)
       .maybeIncrementLogStartOffset(leaderLogStartOffset, LeaderOffsetIncremented)
+
+    leaderLogStartOffset
   }
 
 }
