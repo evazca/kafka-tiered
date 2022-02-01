@@ -528,11 +528,11 @@ class ProducerStateManager(val topicPartition: TopicPartition,
    * Load producer state snapshots by scanning the _logDir.
    */
   private def loadSnapshots(): ConcurrentSkipListMap[java.lang.Long, SnapshotFile] = {
-    val tm = new ConcurrentSkipListMap[java.lang.Long, SnapshotFile]()
-    for (f <- listSnapshotFiles(_logDir)) {
-      tm.put(f.offset, f)
+    val offsetToSnapshots = new ConcurrentSkipListMap[java.lang.Long, SnapshotFile]()
+    for (snapshotFile <- listSnapshotFiles(_logDir)) {
+      offsetToSnapshots.put(snapshotFile.offset, snapshotFile)
     }
-    tm
+    offsetToSnapshots
   }
 
   /**
