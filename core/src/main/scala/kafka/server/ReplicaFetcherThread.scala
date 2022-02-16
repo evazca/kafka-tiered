@@ -254,14 +254,14 @@ class ReplicaFetcherThread(name: String,
     fetchOffsetFromLeader(topicPartition, currentLeaderEpoch, ListOffsetsRequest.LATEST_TIMESTAMP)
   }
 
-  private def fetchOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int, earliestOrLatest: Long): (Int, Long) = {
+  private def fetchOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int, timestamp: Long): (Int, Long) = {
     val topic = new ListOffsetsTopic()
       .setName(topicPartition.topic)
       .setPartitions(Collections.singletonList(
         new ListOffsetsPartition()
           .setPartitionIndex(topicPartition.partition)
           .setCurrentLeaderEpoch(currentLeaderEpoch)
-          .setTimestamp(earliestOrLatest)))
+          .setTimestamp(timestamp)))
     val requestBuilder = ListOffsetsRequest.Builder.forReplica(listOffsetRequestVersion, replicaId)
       .setTargetTimes(Collections.singletonList(topic))
 
@@ -404,10 +404,6 @@ class ReplicaFetcherThread(name: String,
     !fetchState.isReplicaInSync && quota.isThrottled(topicPartition) && quota.isQuotaExceeded
   }
 
-  /**
-   * It tries to build the required state for this partition from leader and remote storage so that it can start
-   * fetching records from the leader.
-   */
   override protected def buildRemoteLogAuxState(partition: TopicPartition,
                                                 currentLeaderEpoch: Int,
                                                 leaderLocalLogStartOffset: Long,
@@ -521,7 +517,7 @@ class ReplicaFetcherThread(name: String,
         }
 
       } else {
-        // Truncate the existing local log  and start from leader's localLogStartOffset.
+        // Truncate the existing local log and start from leader's localLogStartOffset.
         truncateFullyAndStartAt(partition, leaderLocalLogStartOffset)
         leaderLocalLogStartOffset
       }
