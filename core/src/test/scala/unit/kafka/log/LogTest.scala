@@ -4808,6 +4808,18 @@ class LogTest {
     assertEquals(1, log.numberOfSegments)
   }
 
+  @Test
+  def testFetchOffsetByTimestampWithRemoteStorageDisabledOnTopicShouldNotThrow(): Unit = {
+    // This test verifies that when remote storage feature is enabled on system level and disabled on per-topic level.
+    // Then, for the disabled topics, the call to `fetchOffsetByTimestamp` should not access any remote log components.
+    val dirName = Log.logDirName(new TopicPartition("foo", 3))
+    val logDir = new File(tmpDir, dirName)
+    logDir.mkdirs()
+    val logConfig = LogTest.createLogConfig()
+    val log = createLog(logDir, logConfig)
+    log.fetchOffsetByTimestamp(-100, Some(null))
+  }
+
   private def allAbortedTransactions(log: Log) = log.logSegments.flatMap(_.txnIndex.allAbortedTxns)
 
   private def appendTransactionalAsLeader(

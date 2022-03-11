@@ -1836,7 +1836,7 @@ class Log(@volatile private var _dir: File,
           }
         }
 
-        if (isFirstSegment && remoteLogManager.isDefined) {
+        if (isFirstSegment && remoteLogEnabled()) {
           val localOffset = targetSeg.get.findOffsetByTimestamp(targetTimestamp, localLogStartOffset)
           val remoteOffset = remoteLogManager.get.findOffsetByTimestamp(topicPartition, targetTimestamp, logStartOffset)
 
