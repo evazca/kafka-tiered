@@ -19,6 +19,7 @@ package kafka.log.remote
 
 import kafka.server.{BrokerTopicStats, FetchDataInfo, RemoteStorageFetchInfo}
 import kafka.utils.Logging
+import org.apache.kafka.common.errors.OffsetOutOfRangeException
 import org.apache.kafka.common.utils.Time
 
 class RemoteLogReader(fetchInfo: RemoteStorageFetchInfo,
@@ -36,10 +37,12 @@ class RemoteLogReader(fetchInfo: RemoteStorageFetchInfo,
         brokerTopicStats.allTopicsStats.remoteBytesInRate.mark(r.records.sizeInBytes())
         RemoteLogReadResult(Some(r), None)
       } catch {
+        case e: OffsetOutOfRangeException =>
+          RemoteLogReadResult(None, Some(e))
         case e: Exception =>
           brokerTopicStats.topicStats(fetchInfo.topicPartition.topic()).failedRemoteReadRequestRate.mark()
           brokerTopicStats.allTopicsStats.failedRemoteReadRequestRate.mark()
-          error("Error due to", e)
+          error(s"Error occurred while reading the remote data for ${fetchInfo.topicPartition}", e)
           RemoteLogReadResult(None, Some(e))
       }
     }

@@ -17,6 +17,8 @@
 
 package kafka.log.remote
 
+import kafka.common.KafkaException
+
 import java.nio.file.{Files, Path}
 import java.util.{Optional, Properties}
 import java.util.concurrent.atomic.AtomicInteger
@@ -32,6 +34,8 @@ import org.apache.kafka.common.utils.{SystemTime, Utils}
 import org.apache.kafka.server.log.remote.storage.RemoteLogManagerConfig
 import org.junit.jupiter.api.Assertions.{assertEquals, assertThrows, assertTrue}
 import org.junit.jupiter.api.{AfterEach, Test}
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.{Arguments, MethodSource}
 
 import scala.jdk.CollectionConverters._
 
@@ -104,12 +108,13 @@ class RemoteLogReaderTest {
     assertEquals(false, finishedTasks(10))
   }
 
-  @Test
-  def testErr(): Unit = {
-    val rlm = new MockRemoteLogManager(2, 10, logDir.toString) {
+  @ParameterizedTest
+  @MethodSource(Array("parameters"))
+  def testErr(exception: Exception, clazz: Class[Exception], failedRemoteReadRequestCount: Int): Unit = {
+    val brokerTopicStats = new BrokerTopicStats()
+    val rlm = new MockRemoteLogManager(2, 10, logDir.toString, brokerTopicStats) {
       override def read(remoteStorageFetchInfo: RemoteStorageFetchInfo): FetchDataInfo = {
-        throw new OffsetOutOfRangeException("Offset: %d is out of range"
-          .format(remoteStorageFetchInfo.fetchInfo.fetchOffset))
+        throw exception
       }
     }
     val tp = new TopicPartition("test", 1)
@@ -123,11 +128,22 @@ class RemoteLogReaderTest {
     Thread.sleep(100)
     assertTrue(task.isDone)
     assertEquals(None, resultFuture.get.info)
-    assertEquals(classOf[OffsetOutOfRangeException], resultFuture.get.error.get.getClass)
+    assertEquals(clazz, resultFuture.get.error.get.getClass)
+    assertEquals(failedRemoteReadRequestCount, brokerTopicStats.topicStats(tp.topic()).failedRemoteReadRequestRate.count())
+    assertEquals(failedRemoteReadRequestCount, brokerTopicStats.allTopicsStats.failedRemoteReadRequestRate.count())
   }
 }
 
-class MockRemoteLogManager(threads: Int, taskQueueSize: Int, logDir: String)
+object RemoteLogReaderTest {
+  def parameters: java.util.stream.Stream[Arguments] = {
+    java.util.stream.Stream.of(
+      Arguments.of(new OffsetOutOfRangeException("Fetch Offset is out of range"), classOf[OffsetOutOfRangeException], 0),
+      Arguments.of(new KafkaException("Unknown error on offset"), classOf[KafkaException], 1)
+    )
+  }
+}
+
+class MockRemoteLogManager(threads: Int, taskQueueSize: Int, logDir: String, topicStats: BrokerTopicStats = new BrokerTopicStats)
   extends RemoteLogManager(
     _ => None,
     (_, _) => {},
@@ -136,7 +152,7 @@ class MockRemoteLogManager(threads: Int, taskQueueSize: Int, logDir: String)
     1,
     "mock-cluster-id",
     logDir,
-    new BrokerTopicStats) {
+    topicStats) {
 
   private val lock = new ReentrantReadWriteLock
 
