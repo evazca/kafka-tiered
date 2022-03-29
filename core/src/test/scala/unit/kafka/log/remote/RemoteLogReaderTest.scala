@@ -137,8 +137,10 @@ class RemoteLogReaderTest {
 object RemoteLogReaderTest {
   def parameters: java.util.stream.Stream[Arguments] = {
     java.util.stream.Stream.of(
-      Arguments.of(new OffsetOutOfRangeException("Fetch Offset is out of range"), classOf[OffsetOutOfRangeException], 0),
-      Arguments.of(new KafkaException("Unknown error on offset"), classOf[KafkaException], 1)
+      Arguments.of(new OffsetOutOfRangeException("Fetch Offset is out of range").asInstanceOf[AnyRef],
+        classOf[OffsetOutOfRangeException].asInstanceOf[AnyRef], 0.asInstanceOf[AnyRef]),
+      Arguments.of(new KafkaException("Unknown error on offset").asInstanceOf[AnyRef],
+        classOf[KafkaException].asInstanceOf[AnyRef], 1.asInstanceOf[AnyRef])
     )
   }
 }

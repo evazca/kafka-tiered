@@ -33,7 +33,7 @@ import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
 import org.apache.kafka.server.log.remote.storage.LocalTieredStorageCondition.expectEvent
 import org.apache.kafka.server.log.remote.storage.LocalTieredStorageEvent.EventType.{DELETE_SEGMENT, FETCH_SEGMENT, OFFLOAD_SEGMENT}
-import org.apache.kafka.server.log.remote.storage.RemoteLogSegmentFileset
+import org.apache.kafka.server.log.remote.storage.{LocalTieredStorageSnapshot, RemoteLogSegmentFileset}
 import org.apache.kafka.common.serialization.{Serde, Serdes}
 import org.apache.kafka.server.log.remote.metadata.storage.{RemoteLogMetadataTopicPartitioner, TopicBasedRemoteLogMetadataManagerConfig}
 import org.hamcrest.MatcherAssert.assertThat
@@ -632,6 +632,25 @@ final class ExpectLeaderEpochCheckpointAction(brokerId: Int, partition: TopicPar
   }
 }
 
+final class ExpectTopicIdToMatchInRemoteStorageAction(topic: String) extends TieredStorageTestAction {
+  override protected def doExecute(context: TieredStorageTestContext): Unit = {
+    val topicId = context.admin().describeTopics(List(topic).asJava).all.get.get(topic).topicId()
+    context.getTieredStorages.foreach { ts =>
+      val snapshot = LocalTieredStorageSnapshot.takeSnapshot(ts)
+      val partitions = snapshot.getTopicPartitions.asScala.filter(tp => tp.topic().equals(topic))
+      partitions.foreach { partition =>
+        snapshot.getFilesets(partition).forEach { fileSet =>
+          assertEquals(topicId, fileSet.getRemoteLogSegmentId.topicIdPartition().topicId())
+        }
+      }
+    }
+  }
+
+  override def describe(output: PrintStream): Unit = {
+    output.println(s"expect-topic-id-to-match-in-remote-storage topic: $topic")
+  }
+}
+
 /**
   * This builder helps to formulate a test case exercising the tiered storage functionality and formulate
   * the expectations following the execution of the test.
@@ -741,6 +760,13 @@ final class TieredStorageTestBuilder {
       case None => offloadables += topicPartition -> mutable.Buffer(attrsAndRecords)
     }
 
+    this
+  }
+
+  def expectTopicIdToMatchInRemoteStorage(topic: String): this.type = {
+    maybeCreateProduceAction()
+    maybeCreateConsumeActions()
+    actions += new ExpectTopicIdToMatchInRemoteStorageAction(topic)
     this
   }
 

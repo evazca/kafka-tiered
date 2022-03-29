@@ -29,6 +29,7 @@ import kafka.server.Constants._
 import kafka.server.QuotaFactory.QuotaManagers
 import kafka.utils.Implicits._
 import kafka.utils.Logging
+import org.apache.kafka.common.Uuid
 import org.apache.kafka.common.config.ConfigDef.Validator
 import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.common.config.internals.QuotaConfigs
@@ -70,21 +71,25 @@ class TopicConfigHandler(private val replicaManager: ReplicaManager,
       val logConfig = LogConfig.fromProps(logManager.currentDefaultConfig.originals, props)
       val wasRemoteLogEnabledBeforeUpdate = logs.head.remoteLogEnabled()
       logs.foreach(_.updateConfig(logConfig))
-      maybeBootstrapRemoteLogComponents(topic, logs, wasRemoteLogEnabledBeforeUpdate)
+      // In Kafka v2.8, there is a bug when reading the topicId from the Log. The first LeaderAndIsr notification
+      // doesn't set the topic-id in the Log which results to Uuid.ZERO_UUID. This has been fixed in the trunk.
+      // So, loading the topic-id from ZK directly.
+      replicaManager.zkClient.map(_.getTopicIdsForTopics(Predef.Set(topic))).foreach { topicIds =>
+        maybeBootstrapRemoteLogComponents(topicIds, logs, wasRemoteLogEnabledBeforeUpdate)
+      }
     }
   }
 
-  private[server] def maybeBootstrapRemoteLogComponents(topic: String,
+  private[server] def maybeBootstrapRemoteLogComponents(topicIds: Map[String, Uuid],
                                                         logs: Seq[Log],
                                                         wasRemoteLogEnabledBeforeUpdate: Boolean): Unit = {
     val isRemoteLogEnabled = logs.head.remoteLogEnabled()
     // Topic configs gets updated incrementally. This check is added to prevent redundant updates.
     if (!wasRemoteLogEnabledBeforeUpdate && isRemoteLogEnabled) {
-      val topicIds = Map(topic -> logs.head.topicId).asJava
       val (leaderPartitions, followerPartitions) =
         logs.flatMap(log => replicaManager.onlinePartition(log.topicPartition)).partition(_.isLeader)
       replicaManager.remoteLogManager.foreach(rlm =>
-        rlm.onLeadershipChange(leaderPartitions.toSet, followerPartitions.toSet, topicIds))
+        rlm.onLeadershipChange(leaderPartitions.toSet, followerPartitions.toSet, topicIds.asJava))
     } else if (wasRemoteLogEnabledBeforeUpdate && !isRemoteLogEnabled) {
       logs.map(log => {
         log.maybeIncrementLogStartOffsetAsRemoteLogStorageDisabled()

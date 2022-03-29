@@ -414,6 +414,7 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
   @Test
   def testEnableRemoteLogStorageOnTopic(): Unit = {
     val topic = "test-topic"
+    val topicId = Uuid.randomUuid()
     val tp = new TopicPartition(topic, 0)
     val partition: Partition = mock(classOf[Partition])
     expect(partition.isLeader).andReturn(true).once()
@@ -426,12 +427,11 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
     expect(replicaManager.onlinePartition(tp)).andReturn(Some(partition)).once()
     val log: Log = mock(classOf[Log])
     expect(log.remoteLogEnabled()).andReturn(true).once()
-    expect(log.topicId).andReturn(Uuid.randomUuid()).once()
     expect(log.topicPartition).andReturn(tp).once()
     replay(partition, rlm, replicaManager, log)
     val isRemoteLogEnabledBeforeUpdate = false
     val configHandler: TopicConfigHandler = new TopicConfigHandler(replicaManager, null, null, null)
-    configHandler.maybeBootstrapRemoteLogComponents(topic, Seq(log), isRemoteLogEnabledBeforeUpdate)
+    configHandler.maybeBootstrapRemoteLogComponents(Map(topic -> topicId), Seq(log), isRemoteLogEnabledBeforeUpdate)
     assertTrue(followerPartitionsArg.getValue.isEmpty)
     assertEquals(Set(partition), leaderPartitionsArg.getValue)
     verify(partition, rlm, replicaManager, log)
@@ -440,6 +440,7 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
   @Test
   def testDisableRemoteLogStorageOnTopic(): Unit = {
     val topic = "test-topic"
+    val topicId = Uuid.randomUuid()
     val tp = new TopicPartition(topic, 0)
     val partition: Partition = mock(classOf[Partition])
     expect(partition.isLeader).andReturn(true).once()
@@ -457,8 +458,8 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
     replay(partition, rlm, replicaManager, log)
     val isRemoteLogEnabledBeforeUpdate = true
     val configHandler: TopicConfigHandler = new TopicConfigHandler(replicaManager, null, null, null)
-    configHandler.maybeBootstrapRemoteLogComponents(topic, Seq(log), isRemoteLogEnabledBeforeUpdate)
-    configHandler.maybeBootstrapRemoteLogComponents(topic, Seq(log), isRemoteLogEnabledBeforeUpdate)
+    configHandler.maybeBootstrapRemoteLogComponents(Map(topic -> topicId), Seq(log), isRemoteLogEnabledBeforeUpdate)
+    configHandler.maybeBootstrapRemoteLogComponents(Map(topic -> topicId), Seq(log), isRemoteLogEnabledBeforeUpdate)
     verify(partition, rlm, replicaManager, log)
   }
 

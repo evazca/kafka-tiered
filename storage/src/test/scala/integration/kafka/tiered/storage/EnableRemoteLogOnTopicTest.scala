@@ -55,5 +55,6 @@ class EnableRemoteLogOnTopicTest extends TieredStorageTestHarness {
       .consume(topicA, p0, fetchOffset = 0, expectedTotalRecord = 4, expectedRecordsFromSecondTier = 3)
       .expectFetchFromTieredStorage(broker1, topicA, p1, remoteFetchRequestCount = 3)
       .consume(topicA, p1, fetchOffset = 0, expectedTotalRecord = 4, expectedRecordsFromSecondTier = 3)
+      .expectTopicIdToMatchInRemoteStorage(topicA)
   }
 }

@@ -45,5 +45,6 @@ class EnableRemoteLogOnTopicInMiddleOfSegmentDeletionTest extends TieredStorageT
       .expectEarliestOffsetInLogDirectory(topicA, p0, earliestOffset = 3)
       .expectFetchFromTieredStorage(broker0, topicA, p0, remoteFetchRequestCount = 2)
       .consume(topicA, p0, fetchOffset = 0, expectedTotalRecord = 3, expectedRecordsFromSecondTier = 2)
+      .expectTopicIdToMatchInRemoteStorage(topicA)
   }
 }
