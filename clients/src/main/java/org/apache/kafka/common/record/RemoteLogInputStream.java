@@ -57,8 +57,7 @@ public class RemoteLogInputStream implements LogInputStream<RecordBatch> {
         // will have size of "LOG_OVERHEAD + size"
         int bufferSize = LOG_OVERHEAD + size;
         ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
-        System.arraycopy(logHeaderBuffer.array(), 0, buffer.array(), 0, logHeaderBuffer.limit());
-        buffer.position(logHeaderBuffer.limit());
+        buffer.put(logHeaderBuffer);
 
         Utils.readFully(inputStream, buffer);
         if (buffer.position() != bufferSize)
