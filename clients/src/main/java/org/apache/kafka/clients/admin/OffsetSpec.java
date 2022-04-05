@@ -16,6 +16,8 @@
  */
 package org.apache.kafka.clients.admin;
 
+import org.apache.kafka.common.requests.ListOffsetsRequest;
+
 import java.util.Map;
 
 /** 
@@ -37,6 +39,12 @@ public class OffsetSpec {
         }
     }
 
+    public static class EarliestLocalSpec extends TimestampSpec {
+        EarliestLocalSpec(long timestamp) {
+            super(timestamp);
+        }
+    }
+
     /**
      * Used to retrieve the latest offset of a partition
      */
@@ -49,6 +57,13 @@ public class OffsetSpec {
      */
     public static OffsetSpec earliest() {
         return new EarliestSpec();
+    }
+
+    /**
+     * Used to retrieve the earliest local offset of a partition
+     */
+    public static OffsetSpec earliestLocal() {
+        return new EarliestLocalSpec(ListOffsetsRequest.EARLIEST_LOCAL_TIMESTAMP);
     }
 
     /**

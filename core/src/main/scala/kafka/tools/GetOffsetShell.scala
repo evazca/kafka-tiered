@@ -21,6 +21,7 @@ package kafka.tools
 import java.util.Properties
 import joptsimple._
 import kafka.utils.{CommandLineUtils, Exit, ToolsUtils}
+import org.apache.kafka.clients.admin.{Admin, OffsetSpec}
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.common.requests.ListOffsetsRequest
 import org.apache.kafka.common.{PartitionInfo, TopicPartition}
@@ -48,7 +49,7 @@ object GetOffsetShell {
                            .defaultsTo("")
     val timeOpt = parser.accepts("time", "timestamp of the offsets before that. [Note: No offset is returned, if the timestamp greater than recently commited record timestamp is given.]")
                            .withRequiredArg
-                           .describedAs("timestamp/-1(latest)/-2(earliest)")
+                           .describedAs("timestamp/-1(latest)/-2(earliest)/-4(earliest-local)")
                            .ofType(classOf[java.lang.Long])
                            .defaultsTo(-1L)
     parser.accepts("offsets", "DEPRECATED AND IGNORED: number of offsets returned")
@@ -93,6 +94,7 @@ object GetOffsetShell {
     config.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList)
     config.setProperty(ConsumerConfig.CLIENT_ID_CONFIG, clientId)
     val consumer = new KafkaConsumer(config, new ByteArrayDeserializer, new ByteArrayDeserializer)
+    lazy val admin = Admin.create(config)
 
     val partitionInfos = listPartitionInfos(consumer, topic, partitionIdsRequested) match {
       case None =>
@@ -125,6 +127,9 @@ object GetOffsetShell {
     val partitionOffsets: collection.Map[TopicPartition, java.lang.Long] = listOffsetsTimestamp match {
       case ListOffsetsRequest.EARLIEST_TIMESTAMP => consumer.beginningOffsets(topicPartitions.asJava).asScala
       case ListOffsetsRequest.LATEST_TIMESTAMP => consumer.endOffsets(topicPartitions.asJava).asScala
+      case ListOffsetsRequest.EARLIEST_LOCAL_TIMESTAMP =>
+        val offsets = topicPartitions.map(tp => tp -> OffsetSpec.earliestLocal()).toMap.asJava
+        admin.listOffsets(offsets).all.get().asScala.map(e => e._1 -> new java.lang.Long(e._2.offset()))
       case _ =>
         val timestampsToSearch = topicPartitions.map(tp => tp -> (listOffsetsTimestamp: java.lang.Long)).toMap.asJava
         consumer.offsetsForTimes(timestampsToSearch).asScala.map { case (k, x) =>
