@@ -81,7 +81,7 @@ RUN curl -s "$KAFKA_MIRROR/kafka-streams-2.7.0-test.jar" -o /opt/kafka-2.7.0/lib
 
 # Install Hadoop binary dependencies
 ARG HADOOP_VERSION=3.2.2
-ARG HADOOP_MIRROR="https://mirrors.estointernet.in/apache/hadoop/common"
+ARG HADOOP_MIRROR="https://archive.apache.org/dist/hadoop/common"
 RUN mkdir -p "/opt/hadoop-$HADOOP_VERSION" && chmod a+rw /opt/hadoop-$HADOOP_VERSION && curl -s "$HADOOP_MIRROR/hadoop-$HADOOP_VERSION/hadoop-$HADOOP_VERSION.tar.gz" | tar xz --strip-components=1 -C "/opt/hadoop-$HADOOP_VERSION"
 
 # The version of Kibosh to use for testing.

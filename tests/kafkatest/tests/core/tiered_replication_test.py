@@ -17,7 +17,7 @@ from kafkatest.tests.core.replication_test \
     import ReplicationTest, clean_shutdown, matrix, parametrize, cluster, failures, quorum
 from kafkatest.services.hadoop import MiniHadoop
 from kafkatest.services.kafka import config_property
-
+from kafkatest.services.security.security_config import SecurityConfig
 
 class TieredReplicationTest(ReplicationTest):
 
@@ -39,21 +39,18 @@ class TieredReplicationTest(ReplicationTest):
             enable_idempotence=[True])
     @matrix(failure_mode=["clean_shutdown", "hard_shutdown", "clean_bounce", "hard_bounce"],
             broker_type=["leader"],
-            security_protocol=["PLAINTEXT", "SASL_SSL"],
-            metadata_quorum=quorum.all_non_upgrade)
+            security_protocol=["PLAINTEXT", "SASL_SSL"])
     @matrix(failure_mode=["clean_shutdown", "hard_shutdown", "clean_bounce", "hard_bounce"],
             broker_type=["controller"],
             security_protocol=["PLAINTEXT", "SASL_SSL"])
     @matrix(failure_mode=["hard_bounce"],
             broker_type=["leader"],
-            security_protocol=["SASL_SSL"], client_sasl_mechanism=["PLAIN"], interbroker_sasl_mechanism=["PLAIN", "GSSAPI"],
-            metadata_quorum=quorum.all_non_upgrade)
+            security_protocol=["SASL_SSL"], client_sasl_mechanism=["PLAIN"], interbroker_sasl_mechanism=["PLAIN", "GSSAPI"])
     @parametrize(failure_mode="hard_bounce",
                  broker_type="leader",
                  security_protocol="SASL_SSL", client_sasl_mechanism="SCRAM-SHA-256", interbroker_sasl_mechanism="SCRAM-SHA-512")
     @matrix(failure_mode=["clean_shutdown", "hard_shutdown", "clean_bounce", "hard_bounce"],
-            security_protocol=["PLAINTEXT"], broker_type=["leader"], compression_type=["gzip"], tls_version=["TLSv1.2", "TLSv1.3"],
-            metadata_quorum=quorum.all_non_upgrade)
+            security_protocol=["PLAINTEXT"], broker_type=["leader"], compression_type=["gzip"], tls_version=["TLSv1.2", "TLSv1.3"])
     def test_replication_with_broker_failure(self, failure_mode, security_protocol, broker_type,
                                              client_sasl_mechanism="GSSAPI", interbroker_sasl_mechanism="GSSAPI",
                                              compression_type=None, enable_idempotence=False, tls_version=None,
@@ -101,9 +98,25 @@ class TieredReplicationTest(ReplicationTest):
             [config_property.HDFS_BASE_DIR, "/test"],
             [config_property.HDFS_REMOTE_READ_CACHE_BYTES, "8388608"],
             [config_property.HDFS_REMOTE_READ_BYTES, "1048576"],
-            # the `sasl.mechanism` is used by the kafka clients which gets invoked by the metadata manager.
-            [config_property.SASL_MECHANISM, client_sasl_mechanism],
+
+            # RLMM client SASL Configs
+            [config_property.RLMM_COMMON_CLIENT_SASL_KERBEROS_SERVICE_NAME, "kafka"],
+            [config_property.RLMM_COMMON_CLIENT_SASL_MECHANISM, client_sasl_mechanism],
+            [config_property.RLMM_COMMON_CLIENT_SECURITY_PROTOCOL, security_protocol],
+
+            # RLMM client SSL configs
+            [config_property.RLMM_COMMON_CLIENT_SSL_KEY_PASSWORD, "test-ks-passwd"],
+            [config_property.RLMM_COMMON_CLIENT_SSL_KEYSTORE_LOCATION, SecurityConfig.KEYSTORE_PATH],
+            [config_property.RLMM_COMMON_CLIENT_SSL_KEYSTORE_PASSWORD, "test-ks-passwd"],
+            [config_property.RLMM_COMMON_CLIENT_SSL_TRUSTSTORE_LOCATION, SecurityConfig.TRUSTSTORE_PATH],
+            [config_property.RLMM_COMMON_CLIENT_SSL_TRUSTSTORE_PASSWORD, "test-ts-passwd"],
         ]
+
+        # FIXME: If Java version is < 11 and tls version is set to v3, then downgrade it to v2
+        if tls_version is not None:
+            server_prop_overides.append([config_property.RLMM_COMMON_CLIENT_SSL_ENABLED_PROTOCOLS, tls_version])
+            server_prop_overides.append([config_property.RLMM_COMMON_CLIENT_SSL_PROTOCOL, tls_version])
+
         self.create_kafka(num_nodes=3,
                           security_protocol=security_protocol,
                           interbroker_security_protocol=security_protocol,
