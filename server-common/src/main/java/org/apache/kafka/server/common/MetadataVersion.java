@@ -151,7 +151,7 @@ public enum MetadataVersion {
     IBP_3_2_IV0(4, "3.2", "IV0"),
 
     // Support for tiered storage (KIP-405)
-    IBP_3_2_IV1(4, "3.2", "IV1");
+    IBP_3_2_IV1(5, "3.2", "IV1");
 
     public static final MetadataVersion[] VALUES = MetadataVersion.values();
     private final Optional<Short> featureLevel;

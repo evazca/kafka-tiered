@@ -239,13 +239,8 @@ class ReplicaFetcherThread(name: String,
     }
   }
 
-<<<<<<< HEAD
-  override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int): (Int, Long) = {
-    if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_2_IV1))
-=======
   override protected def fetchEarliestLocalOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int): (Int, Long) = {
-    if (brokerConfig.interBrokerProtocolVersion >= KAFKA_3_2_IV0)
->>>>>>> 869ba17067 (Addressed review comments about offsets out of range scenario etc.)
+    if (brokerConfig.interBrokerProtocolVersion.isAtLeast(IBP_3_2_IV1))
       fetchOffsetFromLeader(topicPartition, currentLeaderEpoch, ListOffsetsRequest.EARLIEST_LOCAL_TIMESTAMP)
     else
       fetchOffsetFromLeader(topicPartition, currentLeaderEpoch, ListOffsetsRequest.EARLIEST_TIMESTAMP)
