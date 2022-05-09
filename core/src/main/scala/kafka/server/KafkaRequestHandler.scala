@@ -24,6 +24,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.yammer.metrics.core.Meter
+import kafka.server.BrokerTopicStats.TotalTierLag
 import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.utils.{KafkaThread, Time}
 
@@ -277,6 +278,45 @@ class BrokerTopicMetrics(name: Option[String]) extends KafkaMetricsGroup {
   def close(): Unit = metricTypeMap.values.foreach(_.close())
 }
 
+/**
+  * The tier lag of the given topic, defined as the number of records from non-active segments not yet uploaded to
+  * the remote storage tier.
+  * @param topicName The topic this metric represents the total lag of.
+  */
+class BrokerTopicTierLagMetrics(topicName: String) extends KafkaMetricsGroup {
+  private val tags = Map("topic" -> topicName)
+  private val partitionLags = mutable.Map[Int, Long]()
+  private val lock = new Object
+  private var _lag = 0L
+
+  newGauge[Long](TotalTierLag, () => lock synchronized { _lag }, tags)
+
+  /**
+    * Set the lag of the given partition from the topic tracked by this metric to the given lag.
+    * The total (topic-level) lag is automatically recalculated when this method is called.
+    */
+  def setLag(partition: Int, partitionLag: Long): Unit = {
+    lock synchronized {
+      partitionLags.get(partition).foreach(_lag -= _)
+      partitionLags.put(partition, partitionLag)
+      _lag += partitionLag
+    }
+  }
+
+  /**
+    * Remove any lag from the given partition from the total (topic-level) lag for the topic tracked by this metric.
+    */
+  def removePartition(partition: Int): Unit = {
+    lock synchronized {
+      partitionLags.remove(partition).foreach(_lag -= _)
+    }
+  }
+
+  def lag(): Long = _lag
+
+  def close(): Unit = removeMetric(TotalTierLag, tags)
+}
+
 object BrokerTopicStats {
   val MessagesInPerSec = "MessagesInPerSec"
   val BytesInPerSec = "BytesInPerSec"
@@ -295,6 +335,7 @@ object BrokerTopicStats {
   val RemoteBytesOutPerSec = "RemoteBytesOutPerSec"
   val RemoteBytesInPerSec = "RemoteBytesInPerSec"
   val RemoteReadRequestsPerSec = "RemoteReadRequestsPerSec"
+  val TotalTierLag = "TotalTierLag"
   val FailedRemoteReadRequestsPerSec = "RemoteReadErrorsPerSec"
   val FailedRemoteWriteRequestsPerSec = "RemoteWriteErrorsPerSec"
 
@@ -305,16 +346,21 @@ object BrokerTopicStats {
   val InvalidOffsetOrSequenceRecordsPerSec = "InvalidOffsetOrSequenceRecordsPerSec"
 
   private val valueFactory = (k: String) => new BrokerTopicMetrics(Some(k))
+  private val tieredMetricsFactory = (k: String) => new BrokerTopicTierLagMetrics(k)
 }
 
 class BrokerTopicStats extends Logging {
   import BrokerTopicStats._
 
   private val stats = new Pool[String, BrokerTopicMetrics](Some(valueFactory))
+  private val tieredLagStats = new Pool[String, BrokerTopicTierLagMetrics](Some(tieredMetricsFactory))
   val allTopicsStats = new BrokerTopicMetrics(None)
 
   def topicStats(topic: String): BrokerTopicMetrics =
     stats.getAndMaybePut(topic)
+
+  def tierLagStats(topic: String): BrokerTopicTierLagMetrics =
+    tieredLagStats.getAndMaybePut(topic)
 
   def updateReplicationBytesIn(value: Long): Unit = {
     allTopicsStats.replicationBytesInRate.foreach { metric =>
@@ -370,6 +416,10 @@ class BrokerTopicStats extends Logging {
     val metrics = stats.remove(topic)
     if (metrics != null)
       metrics.close()
+
+    val lagMetrics = tieredLagStats.remove(topic)
+    if (lagMetrics != null)
+      lagMetrics.close()
   }
 
   def updateBytesOut(topic: String, isFollower: Boolean, isReassignment: Boolean, value: Long): Unit = {
@@ -386,6 +436,7 @@ class BrokerTopicStats extends Logging {
   def close(): Unit = {
     allTopicsStats.close()
     stats.values.foreach(_.close())
+    tieredLagStats.values.foreach(_.close())
 
     info("Broker and topic stats closed")
   }
