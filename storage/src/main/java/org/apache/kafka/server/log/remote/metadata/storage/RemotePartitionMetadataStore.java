@@ -69,7 +69,7 @@ public class RemotePartitionMetadataStore extends RemotePartitionMetadataEventHa
         if (remoteLogMetadataCache != null) {
             remoteLogMetadataCache.addCopyInProgressSegment(remoteLogSegmentMetadata);
         } else {
-            log.error("No partition metadata found for : " + topicIdPartition);
+            throw new IllegalStateException("No partition metadata found for : " + topicIdPartition);
         }
     }
 
@@ -87,10 +87,10 @@ public class RemotePartitionMetadataStore extends RemotePartitionMetadataEventHa
             try {
                 remoteLogMetadataCache.updateRemoteLogSegmentMetadata(rlsmUpdate);
             } catch (RemoteResourceNotFoundException e) {
-                log.error("Error occurred while updating the remote log segment.");
+                log.warn("Error occurred while updating the remote log segment.", e);
             }
         } else {
-            log.error("No partition metadata found for : " + topicIdPartition);
+            throw new IllegalStateException("No partition metadata found for : " + topicIdPartition);
         }
     }
 
@@ -110,9 +110,9 @@ public class RemotePartitionMetadataStore extends RemotePartitionMetadataEventHa
     }
 
     @Override
-    public void syncLogMetadataDataFile(TopicIdPartition topicIdPartition,
+    public void syncLogMetadataSnapshot(TopicIdPartition topicIdPartition,
                                         int metadataPartition,
-                                        long metadataPartitionOffset) throws IOException {
+                                        Long metadataPartitionOffset) throws IOException {
         RemotePartitionDeleteMetadata partitionDeleteMetadata = idToPartitionDeleteMetadata.get(topicIdPartition);
         if (partitionDeleteMetadata != null) {
             log.info("Skipping syncing of metadata snapshot as remote partition [{}] is with state: [{}] ", topicIdPartition,
@@ -123,6 +123,11 @@ public class RemotePartitionMetadataStore extends RemotePartitionMetadataEventHa
                 remoteLogMetadataCache.flushToFile(metadataPartition, metadataPartitionOffset);
             }
         }
+    }
+
+    @Override
+    public void clearTopicPartition(TopicIdPartition topicIdPartition) {
+        idToRemoteLogMetadataCache.remove(topicIdPartition);
     }
 
     public Iterator<RemoteLogSegmentMetadata> listRemoteLogSegments(TopicIdPartition topicIdPartition)

@@ -44,10 +44,11 @@ public abstract class RemotePartitionMetadataEventHandler {
 
     protected abstract void handleRemotePartitionDeleteMetadata(RemotePartitionDeleteMetadata remotePartitionDeleteMetadata);
 
-    public abstract void syncLogMetadataDataFile(TopicIdPartition topicIdPartition,
+    public abstract void syncLogMetadataSnapshot(TopicIdPartition topicIdPartition,
                                                  int metadataPartition,
-                                                 long metadataPartitionOffset) throws IOException;
+                                                 Long metadataPartitionOffset) throws IOException;
+
+    public abstract void clearTopicPartition(TopicIdPartition topicIdPartition);
 
     public abstract void markInitialized(TopicIdPartition partition);
-
 }

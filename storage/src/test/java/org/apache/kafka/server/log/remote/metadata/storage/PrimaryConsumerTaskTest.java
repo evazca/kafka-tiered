@@ -263,7 +263,11 @@ class PrimaryConsumerTaskTest {
         }
 
         @Override
-        public void syncLogMetadataDataFile(TopicIdPartition topicIdPartition, int metadataPartition, long metadataPartitionOffset) {
+        public void syncLogMetadataSnapshot(TopicIdPartition topicIdPartition, int metadataPartition, Long metadataPartitionOffset) {
+        }
+
+        @Override
+        public void clearTopicPartition(TopicIdPartition topicIdPartition) {
         }
 
         @Override
