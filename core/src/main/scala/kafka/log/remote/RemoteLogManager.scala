@@ -319,7 +319,7 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
       // Publish delete segment started event.
       remoteLogMetadataManager.updateRemoteLogSegmentMetadata(
         new RemoteLogSegmentMetadataUpdate(segmentMetadata.remoteLogSegmentId(), time.milliseconds(),
-          RemoteLogSegmentState.DELETE_SEGMENT_STARTED, brokerId))
+          RemoteLogSegmentState.DELETE_SEGMENT_STARTED, brokerId)).get()
 
       // Delete the segment in remote storage.
       remoteLogStorageManager.deleteLogSegmentData(segmentMetadata)
@@ -327,7 +327,7 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
       // Publish delete segment finished event.
       remoteLogMetadataManager.updateRemoteLogSegmentMetadata(
         new RemoteLogSegmentMetadataUpdate(segmentMetadata.remoteLogSegmentId(), time.milliseconds(),
-          RemoteLogSegmentState.DELETE_SEGMENT_FINISHED, brokerId))
+          RemoteLogSegmentState.DELETE_SEGMENT_FINISHED, brokerId)).get()
       true
     } else false
   }
@@ -451,7 +451,7 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
                   segment.largestTimestamp, brokerId, time.milliseconds(), segment.log.sizeInBytes(),
                   segmentLeaderEpochs)
 
-                remoteLogMetadataManager.addRemoteLogSegmentMetadata(remoteLogSegmentMetadata)
+                remoteLogMetadataManager.addRemoteLogSegmentMetadata(remoteLogSegmentMetadata).get()
 
                 val leaderEpochsIndex = getLeaderEpochCheckpoint(log, startOffset = -1, nextOffset).readAsByteBuffer()
                 val segmentData = new LogSegmentData(logFile.toPath, segment.lazyOffsetIndex.get.path,
@@ -462,7 +462,7 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
                 val rlsmAfterCreate = new RemoteLogSegmentMetadataUpdate(id, time.milliseconds(),
                   RemoteLogSegmentState.COPY_SEGMENT_FINISHED, brokerId)
 
-                remoteLogMetadataManager.updateRemoteLogSegmentMetadata(rlsmAfterCreate)
+                remoteLogMetadataManager.updateRemoteLogSegmentMetadata(rlsmAfterCreate).get()
                 brokerTopicStats.topicStats(tpId.topicPartition().topic())
                   .remoteBytesOutRate.mark(remoteLogSegmentMetadata.segmentSizeInBytes())
                 brokerTopicStats.allTopicsStats.remoteBytesOutRate.mark(remoteLogSegmentMetadata.segmentSizeInBytes())

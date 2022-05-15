@@ -20,7 +20,6 @@ import kafka.api.IntegrationTestHarness;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicIdPartition;
-import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +30,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
@@ -40,7 +38,7 @@ import static org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemo
 import static org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_SECONDARY_CONSUMER_SUBSCRIPTION_INTERVAL_MS_PROP;
 import static org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_TOPIC_PARTITIONS_PROP;
 import static org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_TOPIC_REPLICATION_FACTOR_PROP;
-import static org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_TOPIC_RETENTION_MILLIS_PROP;
+import static org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_TOPIC_RETENTION_MS_PROP;
 
 /**
  * A test harness class that brings up 3 brokers and registers {@link TopicBasedRemoteLogMetadataManager} on broker with id as 0.
@@ -101,7 +99,7 @@ public class TopicBasedRemoteLogMetadataManagerHarness extends IntegrationTestHa
         configs.put(LOG_DIR, logDir);
         configs.put(REMOTE_LOG_METADATA_TOPIC_PARTITIONS_PROP, METADATA_TOPIC_PARTITIONS_COUNT);
         configs.put(REMOTE_LOG_METADATA_TOPIC_REPLICATION_FACTOR_PROP, METADATA_TOPIC_REPLICATION_FACTOR);
-        configs.put(REMOTE_LOG_METADATA_TOPIC_RETENTION_MILLIS_PROP, METADATA_TOPIC_RETENTION_MS);
+        configs.put(REMOTE_LOG_METADATA_TOPIC_RETENTION_MS_PROP, METADATA_TOPIC_RETENTION_MS);
         configs.put(REMOTE_LOG_METADATA_SECONDARY_CONSUMER_SUBSCRIPTION_INTERVAL_MS_PROP, 2000L);
 
         log.debug("TopicBasedRemoteLogMetadataManager configs before adding overridden properties: {}", configs);
@@ -115,7 +113,7 @@ public class TopicBasedRemoteLogMetadataManagerHarness extends IntegrationTestHa
 
         topicBasedRemoteLogMetadataManager.configure(configs);
         try {
-            waitUntilInitialized(120_000);
+            waitUntilInitialized(60_000);
         } catch (TimeoutException e) {
             throw new KafkaException(e);
         }
@@ -143,13 +141,6 @@ public class TopicBasedRemoteLogMetadataManagerHarness extends IntegrationTestHa
 
     protected TopicBasedRemoteLogMetadataManager remoteLogMetadataManager() {
         return topicBasedRemoteLogMetadataManager;
-    }
-
-    private void createMetadataTopic() {
-        Properties topicConfigs = new Properties();
-        topicConfigs.put(TopicConfig.RETENTION_MS_CONFIG, Long.toString(METADATA_TOPIC_RETENTION_MS));
-        kafka.utils.TestUtils.createTopic(zkClient(), topicBasedRemoteLogMetadataManager.config().remoteLogMetadataTopicName(),
-                METADATA_TOPIC_PARTITIONS_COUNT, METADATA_TOPIC_REPLICATION_FACTOR, servers(), topicConfigs);
     }
 
     public void close() throws IOException {

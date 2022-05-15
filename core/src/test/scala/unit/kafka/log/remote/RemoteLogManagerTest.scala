@@ -40,6 +40,7 @@ import org.junit.jupiter.params.provider.CsvSource
 
 import java.io.{File, FileInputStream}
 import java.nio.file.{Files, Paths}
+import java.util.concurrent.CompletableFuture
 import java.util.{Collections, Optional, Properties}
 import java.{lang, util}
 import scala.collection.{Seq, mutable}
@@ -577,7 +578,8 @@ class RemoteLogManagerTest {
       else
         Collections.emptyIterator()
     }).anyTimes()
-    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate]))).anyTimes()
+    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate])))
+      .andReturn(CompletableFuture.completedFuture(null)).anyTimes()
 
     val args1 = newCapture[RemoteLogSegmentMetadata](CaptureType.ALL)
     expect(rsmManager.deleteLogSegmentData(capture(args1))).anyTimes()
@@ -638,7 +640,8 @@ class RemoteLogManagerTest {
       else
         Collections.emptyIterator()
     }).anyTimes()
-    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate]))).anyTimes()
+    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate])))
+      .andReturn(CompletableFuture.completedFuture(null)).anyTimes()
 
     val args1 = newCapture[RemoteLogSegmentMetadata](CaptureType.ALL)
     expect(rsmManager.deleteLogSegmentData(capture(args1))).anyTimes()
@@ -701,7 +704,8 @@ class RemoteLogManagerTest {
       else
         Collections.emptyIterator()
     }).anyTimes()
-    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate]))).anyTimes()
+    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate])))
+      .andReturn(CompletableFuture.completedFuture(null)).anyTimes()
 
     val args1 = newCapture[RemoteLogSegmentMetadata](CaptureType.ALL)
     expect(rsmManager.deleteLogSegmentData(capture(args1))).anyTimes()
@@ -867,8 +871,10 @@ class RemoteLogManagerTest {
     val rsmManager: ClassLoaderAwareRemoteStorageManager = createMock(classOf[ClassLoaderAwareRemoteStorageManager])
 
     val rlmmManager: RemoteLogMetadataManager = createMock(classOf[RemoteLogMetadataManager])
-    expect(rlmmManager.addRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadata]))).anyTimes()
-    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate]))).anyTimes()
+    expect(rlmmManager.addRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadata])))
+      .andReturn(CompletableFuture.completedFuture(null)).anyTimes()
+    expect(rlmmManager.updateRemoteLogSegmentMetadata(anyObject(classOf[RemoteLogSegmentMetadataUpdate])))
+      .andReturn(CompletableFuture.completedFuture(null)).anyTimes()
 
     expect(rlmmManager.highestOffsetForEpoch(EasyMock.eq(topicIdPartition), EasyMock.eq(0)))
       .andReturn(Optional.of(19L)).anyTimes()

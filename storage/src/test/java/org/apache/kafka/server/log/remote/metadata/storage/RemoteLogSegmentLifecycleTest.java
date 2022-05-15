@@ -45,6 +45,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -79,7 +81,7 @@ public class RemoteLogSegmentLifecycleTest {
             RemoteLogSegmentMetadata segment0Metadata = new RemoteLogSegmentMetadata(segment0Id, 0L, 100L,
                                                                                      -1L, BROKER_ID_0, time.milliseconds(), SEG_SIZE,
                                                                                      segment0LeaderEpochs);
-            remoteLogSegmentLifecycleManager.addRemoteLogSegmentMetadata(segment0Metadata);
+            remoteLogSegmentLifecycleManager.addRemoteLogSegmentMetadata(segment0Metadata).get();
 
             // We should not get this as the segment is still getting copied and it is not yet considered successful until
             // it reaches RemoteLogSegmentState.COPY_SEGMENT_FINISHED.
@@ -96,7 +98,7 @@ public class RemoteLogSegmentLifecycleTest {
 
             RemoteLogSegmentMetadataUpdate segment0Update = new RemoteLogSegmentMetadataUpdate(
                     segment0Id, time.milliseconds(), RemoteLogSegmentState.COPY_SEGMENT_FINISHED, BROKER_ID_1);
-            remoteLogSegmentLifecycleManager.updateRemoteLogSegmentMetadata(segment0Update);
+            remoteLogSegmentLifecycleManager.updateRemoteLogSegmentMetadata(segment0Update).get();
             RemoteLogSegmentMetadata expectedSegment0Metadata = segment0Metadata.createWithUpdates(segment0Update);
 
             // segment 1
@@ -171,7 +173,7 @@ public class RemoteLogSegmentLifecycleTest {
                     .updateRemoteLogSegmentMetadata(new RemoteLogSegmentMetadataUpdate(expectedSegment0Metadata.remoteLogSegmentId(),
                                                                                        time.milliseconds(),
                                                                                        RemoteLogSegmentState.DELETE_SEGMENT_STARTED,
-                                                                                       BROKER_ID_1));
+                                                                                       BROKER_ID_1)).get();
             assertFalse(remoteLogSegmentLifecycleManager.remoteLogSegmentMetadata(0, 10).isPresent());
 
             // Update segment with state as DELETE_SEGMENT_FINISHED.
@@ -180,7 +182,7 @@ public class RemoteLogSegmentLifecycleTest {
                     .updateRemoteLogSegmentMetadata(new RemoteLogSegmentMetadataUpdate(expectedSegment0Metadata.remoteLogSegmentId(),
                                                                                        time.milliseconds(),
                                                                                        RemoteLogSegmentState.DELETE_SEGMENT_FINISHED,
-                                                                                       BROKER_ID_1));
+                                                                                       BROKER_ID_1)).get();
             assertFalse(remoteLogSegmentLifecycleManager.remoteLogSegmentMetadata(0, 10).isPresent());
 
             //////////////////////////////////////////////////////////////////////////////////////////
@@ -222,7 +224,7 @@ public class RemoteLogSegmentLifecycleTest {
             RemoteLogSegmentId segmentId = new RemoteLogSegmentId(topicIdPartition, Uuid.randomUuid());
             RemoteLogSegmentMetadata segmentMetadata = new RemoteLogSegmentMetadata(segmentId, 0L, 50L, -1L, BROKER_ID_0,
                                                                                     time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
-            remoteLogSegmentLifecycleManager.addRemoteLogSegmentMetadata(segmentMetadata);
+            remoteLogSegmentLifecycleManager.addRemoteLogSegmentMetadata(segmentMetadata).get();
 
             // This segment should not be available as the state is not reached to COPY_SEGMENT_FINISHED.
             Optional<RemoteLogSegmentMetadata> segMetadataForOffset0Epoch0 = remoteLogSegmentLifecycleManager.remoteLogSegmentMetadata(0, 0);
@@ -299,7 +301,7 @@ public class RemoteLogSegmentLifecycleTest {
                                                                                                       time.milliseconds(),
                                                                                                       RemoteLogSegmentState.DELETE_SEGMENT_FINISHED,
                                                                                                       BROKER_ID_1);
-            remoteLogSegmentLifecycleManager.updateRemoteLogSegmentMetadata(segmentMetadataUpdate);
+            remoteLogSegmentLifecycleManager.updateRemoteLogSegmentMetadata(segmentMetadataUpdate).get();
 
             // listRemoteLogSegments(0) and listRemoteLogSegments() should not contain the above segment.
             assertFalse(remoteLogSegmentLifecycleManager.listRemoteLogSegments(0).hasNext());
@@ -369,14 +371,14 @@ public class RemoteLogSegmentLifecycleTest {
                                                                   long startOffset,
                                                                   long endOffset,
                                                                   RemoteLogSegmentState state)
-            throws RemoteStorageException {
+            throws RemoteStorageException, ExecutionException, InterruptedException {
         RemoteLogSegmentId segmentId = new RemoteLogSegmentId(topicIdPartition, Uuid.randomUuid());
         RemoteLogSegmentMetadata segmentMetadata = new RemoteLogSegmentMetadata(segmentId, startOffset, endOffset, -1L, BROKER_ID_0,
                 time.milliseconds(), SEG_SIZE, segmentLeaderEpochs);
-        remoteLogSegmentLifecycleManager.addRemoteLogSegmentMetadata(segmentMetadata);
+        remoteLogSegmentLifecycleManager.addRemoteLogSegmentMetadata(segmentMetadata).get();
 
         RemoteLogSegmentMetadataUpdate segMetadataUpdate = new RemoteLogSegmentMetadataUpdate(segmentId, time.milliseconds(), state, BROKER_ID_1);
-        remoteLogSegmentLifecycleManager.updateRemoteLogSegmentMetadata(segMetadataUpdate);
+        remoteLogSegmentLifecycleManager.updateRemoteLogSegmentMetadata(segMetadataUpdate).get();
 
         return segmentMetadata.createWithUpdates(segMetadataUpdate);
     }
@@ -437,13 +439,13 @@ public class RemoteLogSegmentLifecycleTest {
         }
 
         @Override
-        public void addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata segmentMetadata) throws RemoteStorageException {
-            remoteLogMetadataManager().addRemoteLogSegmentMetadata(segmentMetadata);
+        public CompletableFuture<Void> addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata segmentMetadata) throws RemoteStorageException {
+            return remoteLogMetadataManager().addRemoteLogSegmentMetadata(segmentMetadata);
         }
 
         @Override
-        public void updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate segmentMetadataUpdate) throws RemoteStorageException {
-            remoteLogMetadataManager().updateRemoteLogSegmentMetadata(segmentMetadataUpdate);
+        public CompletableFuture<Void> updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate segmentMetadataUpdate) throws RemoteStorageException {
+            return remoteLogMetadataManager().updateRemoteLogSegmentMetadata(segmentMetadataUpdate);
         }
 
         @Override
@@ -488,12 +490,13 @@ public class RemoteLogSegmentLifecycleTest {
         private final RemoteLogMetadataCache metadataCache = new RemoteLogMetadataCache();
 
         @Override
-        public void updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate segmentMetadataUpdate) throws RemoteStorageException {
+        public CompletableFuture<Void> updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate segmentMetadataUpdate) throws RemoteStorageException {
             metadataCache.updateRemoteLogSegmentMetadata(segmentMetadataUpdate);
+            return CompletableFuture.completedFuture(null);
         }
 
         @Override
-        public Optional<Long> highestOffsetForEpoch(int epoch) throws RemoteStorageException {
+        public Optional<Long> highestOffsetForEpoch(int epoch) {
             return metadataCache.highestOffsetForEpoch(epoch);
         }
 
@@ -514,8 +517,9 @@ public class RemoteLogSegmentLifecycleTest {
         }
 
         @Override
-        public void addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata segmentMetadata) throws RemoteStorageException {
+        public CompletableFuture<Void> addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata segmentMetadata) {
             metadataCache.addCopyInProgressSegment(segmentMetadata);
+            return CompletableFuture.completedFuture(null);
         }
     }
 }

@@ -29,19 +29,20 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 public class TopicBasedRemoteLogMetadataManagerWrapperWithHarness implements RemoteLogMetadataManager {
 
     private final TopicBasedRemoteLogMetadataManagerHarness harness = new TopicBasedRemoteLogMetadataManagerHarness();
 
     @Override
-    public void addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata remoteLogSegmentMetadata) throws RemoteStorageException {
-        delegate().addRemoteLogSegmentMetadata(remoteLogSegmentMetadata);
+    public CompletableFuture<Void> addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata remoteLogSegmentMetadata) throws RemoteStorageException {
+        return delegate().addRemoteLogSegmentMetadata(remoteLogSegmentMetadata);
     }
 
     @Override
-    public void updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate remoteLogSegmentMetadataUpdate) throws RemoteStorageException {
-        delegate().updateRemoteLogSegmentMetadata(remoteLogSegmentMetadataUpdate);
+    public CompletableFuture<Void> updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate remoteLogSegmentMetadataUpdate) throws RemoteStorageException {
+        return delegate().updateRemoteLogSegmentMetadata(remoteLogSegmentMetadataUpdate);
     }
 
     @Override
@@ -58,8 +59,8 @@ public class TopicBasedRemoteLogMetadataManagerWrapperWithHarness implements Rem
     }
 
     @Override
-    public void putRemotePartitionDeleteMetadata(RemotePartitionDeleteMetadata remotePartitionDeleteMetadata) throws RemoteStorageException {
-        delegate().putRemotePartitionDeleteMetadata(remotePartitionDeleteMetadata);
+    public CompletableFuture<Void> putRemotePartitionDeleteMetadata(RemotePartitionDeleteMetadata remotePartitionDeleteMetadata) throws RemoteStorageException {
+        return delegate().putRemotePartitionDeleteMetadata(remotePartitionDeleteMetadata);
     }
 
     @Override

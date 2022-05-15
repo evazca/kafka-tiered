@@ -28,6 +28,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 public class ClassLoaderAwareRemoteLogMetadataManager implements RemoteLogMetadataManager {
     private final RemoteLogMetadataManager delegate;
@@ -40,19 +41,13 @@ public class ClassLoaderAwareRemoteLogMetadataManager implements RemoteLogMetada
     }
 
     @Override
-    public void addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata remoteLogSegmentMetadata) throws RemoteStorageException {
-        withClassLoader(() -> {
-            delegate.addRemoteLogSegmentMetadata(remoteLogSegmentMetadata);
-            return null;
-        });
+    public CompletableFuture<Void> addRemoteLogSegmentMetadata(RemoteLogSegmentMetadata remoteLogSegmentMetadata) throws RemoteStorageException {
+        return withClassLoader(() -> delegate.addRemoteLogSegmentMetadata(remoteLogSegmentMetadata));
     }
 
     @Override
-    public void updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate remoteLogSegmentMetadataUpdate) throws RemoteStorageException {
-        withClassLoader(() -> {
-            delegate.updateRemoteLogSegmentMetadata(remoteLogSegmentMetadataUpdate);
-            return null;
-        });
+    public CompletableFuture<Void> updateRemoteLogSegmentMetadata(RemoteLogSegmentMetadataUpdate remoteLogSegmentMetadataUpdate) throws RemoteStorageException {
+        return withClassLoader(() -> delegate.updateRemoteLogSegmentMetadata(remoteLogSegmentMetadataUpdate));
     }
 
     @Override
@@ -69,11 +64,8 @@ public class ClassLoaderAwareRemoteLogMetadataManager implements RemoteLogMetada
     }
 
     @Override
-    public void putRemotePartitionDeleteMetadata(RemotePartitionDeleteMetadata remotePartitionDeleteMetadata) throws RemoteStorageException {
-        withClassLoader(() -> {
-            delegate.putRemotePartitionDeleteMetadata(remotePartitionDeleteMetadata);
-            return null;
-        });
+    public CompletableFuture<Void> putRemotePartitionDeleteMetadata(RemotePartitionDeleteMetadata remotePartitionDeleteMetadata) throws RemoteStorageException {
+        return withClassLoader(() -> delegate.putRemotePartitionDeleteMetadata(remotePartitionDeleteMetadata));
     }
 
     @Override

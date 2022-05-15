@@ -126,12 +126,12 @@ public class TopicBasedRemoteLogMetadataManagerMultipleSubscriptionsTest {
         RemoteLogSegmentMetadata leaderSegmentMetadata = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),
                                                                                       0, 100, -1L, 0,
                                                                                       time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
-        Assertions.assertThrows(RemoteStorageException.class, () -> rlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata));
+        Assertions.assertThrows(Exception.class, () -> rlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata).get());
 
         RemoteLogSegmentMetadata followerSegmentMetadata = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(followerTopicIdPartition, Uuid.randomUuid()),
                                                                                         0, 100, -1L, 0,
                                                                                         time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
-        Assertions.assertThrows(RemoteStorageException.class, () -> rlmm().addRemoteLogSegmentMetadata(followerSegmentMetadata));
+        Assertions.assertThrows(Exception.class, () -> rlmm().addRemoteLogSegmentMetadata(followerSegmentMetadata).get());
 
         // `listRemoteLogSegments` will receive an exception as these topic partitions are not yet registered.
         Assertions.assertThrows(RemoteStorageException.class, () -> rlmm().listRemoteLogSegments(leaderTopicIdPartition));

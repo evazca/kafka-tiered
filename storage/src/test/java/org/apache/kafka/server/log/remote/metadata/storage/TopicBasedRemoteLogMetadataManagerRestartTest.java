@@ -110,12 +110,12 @@ public class TopicBasedRemoteLogMetadataManagerRestartTest {
         RemoteLogSegmentMetadata leaderSegmentMetadata = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),
                                                                                       0, 100, -1L, 0,
                                                                                       time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
-        topicBasedRlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata);
+        topicBasedRlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata).get();
 
         RemoteLogSegmentMetadata followerSegmentMetadata = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(followerTopicIdPartition, Uuid.randomUuid()),
                                                                                         0, 100, -1L, 0,
                                                                                         time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
-        topicBasedRlmm().addRemoteLogSegmentMetadata(followerSegmentMetadata);
+        topicBasedRlmm().addRemoteLogSegmentMetadata(followerSegmentMetadata).get();
 
 
         // Stop TopicBasedRemoteLogMetadataManager only.
@@ -137,7 +137,7 @@ public class TopicBasedRemoteLogMetadataManagerRestartTest {
         RemoteLogSegmentMetadata leaderSegmentMetadata2 = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),
                                                                                       101, 200, -1L, 0,
                                                                                       time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 101L));
-        topicBasedRlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata2);
+        topicBasedRlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata2).get();
 
         // Check that both the stored segment and recently added segment are available.
         Assertions.assertTrue(TestUtils.sameElementsWithoutOrder(Arrays.asList(leaderSegmentMetadata, leaderSegmentMetadata2).iterator(),

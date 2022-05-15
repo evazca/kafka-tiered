@@ -25,7 +25,7 @@ import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.metadata.BrokerState
 import org.apache.kafka.server.log.remote.metadata.storage.{TopicBasedRemoteLogMetadataManager, TopicBasedRemoteLogMetadataManagerConfig}
 import org.apache.kafka.server.log.remote.storage.LocalTieredStorage.{STORAGE_CONFIG_PREFIX, STORAGE_DIR_PROP}
-import org.apache.kafka.server.log.remote.storage.RemoteLogManagerConfig.{REMOTE_LOG_METADATA_MANAGER_CONFIG_PREFIX_PROP, REMOTE_STORAGE_MANAGER_CONFIG_PREFIX_PROP}
+import org.apache.kafka.server.log.remote.storage.RemoteLogManagerConfig.{DEFAULT_REMOTE_LOG_METADATA_MANAGER_CONFIG_PREFIX, REMOTE_LOG_METADATA_MANAGER_CONFIG_PREFIX_PROP, REMOTE_STORAGE_MANAGER_CONFIG_PREFIX_PROP}
 import org.apache.kafka.server.log.remote.storage.{LocalTieredStorage, RemoteLogManagerConfig}
 
 import java.util.Properties
@@ -47,7 +47,7 @@ class TransactionsTestWithTieredStore extends TransactionsTest {
   }
 
   def metadataConfigPrefix(key: String = ""): String = {
-    "rlmm.config." + key
+    DEFAULT_REMOTE_LOG_METADATA_MANAGER_CONFIG_PREFIX + key
   }
 
   override def generateConfigs: Seq[KafkaConfig] = {
