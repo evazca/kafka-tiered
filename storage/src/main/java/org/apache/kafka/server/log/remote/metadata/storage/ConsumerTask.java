@@ -61,8 +61,8 @@ import static org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemo
  * After receiving these events it invokes {@link RemotePartitionMetadataEventHandler#handleRemoteLogSegmentMetadata(RemoteLogSegmentMetadata)},
  * which maintains in-memory representation of the state of {@link RemoteLogSegmentMetadata}.
  */
-class PrimaryConsumerTask implements Runnable, Closeable {
-    private static final Logger log = LoggerFactory.getLogger(PrimaryConsumerTask.class);
+class ConsumerTask implements Runnable, Closeable {
+    private static final Logger log = LoggerFactory.getLogger(ConsumerTask.class);
     static long pollIntervalMs = 100L;
 
     private final RemoteLogMetadataSerde serde = new RemoteLogMetadataSerde();
@@ -88,9 +88,9 @@ class PrimaryConsumerTask implements Runnable, Closeable {
     private Map<TopicPartition, Long> endOffsetsByMetadataPartition = new HashMap<>();
     private boolean isEndOffsetsFetchFailed = false;
 
-    public PrimaryConsumerTask(final RemotePartitionMetadataEventHandler handler,
-                               final RemoteLogMetadataTopicPartitioner partitioner,
-                               final Supplier<Consumer<byte[], byte[]>> consumerSupplier) {
+    public ConsumerTask(final RemotePartitionMetadataEventHandler handler,
+                        final RemoteLogMetadataTopicPartitioner partitioner,
+                        final Supplier<Consumer<byte[], byte[]>> consumerSupplier) {
         this.handler = Objects.requireNonNull(handler);
         this.partitioner = Objects.requireNonNull(partitioner);
         this.consumer = consumerSupplier.get();
@@ -292,7 +292,7 @@ class PrimaryConsumerTask implements Runnable, Closeable {
 
     static Set<TopicPartition> toRemoteLogPartitions(final Set<Integer> partitions) {
         return partitions.stream()
-                .map(PrimaryConsumerTask::toRemoteLogPartition)
+                .map(ConsumerTask::toRemoteLogPartition)
                 .collect(Collectors.toSet());
     }
 

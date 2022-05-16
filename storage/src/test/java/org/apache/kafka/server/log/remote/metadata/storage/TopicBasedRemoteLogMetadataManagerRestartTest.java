@@ -73,7 +73,7 @@ public class TopicBasedRemoteLogMetadataManagerRestartTest {
         remoteLogMetadataManagerHarness.closeRemoteLogMetadataManager();
     }
 
-    public TopicBasedRemoteLogMetadataManager topicBasedRlmm() {
+    private TopicBasedRemoteLogMetadataManager topicBasedRlmm() {
         return remoteLogMetadataManagerHarness.remoteLogMetadataManager();
     }
 
@@ -107,16 +107,17 @@ public class TopicBasedRemoteLogMetadataManagerRestartTest {
         topicBasedRlmm().onPartitionLeadershipChanges(Collections.singleton(leaderTopicIdPartition), Collections.singleton(followerTopicIdPartition));
 
         // Add segments for these partitions but they are not available as they have not yet been subscribed.
-        RemoteLogSegmentMetadata leaderSegmentMetadata = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),
-                                                                                      0, 100, -1L, 0,
-                                                                                      time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
+        RemoteLogSegmentMetadata leaderSegmentMetadata = new RemoteLogSegmentMetadata(
+                new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),
+                0, 100, -1L, 0,
+                time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
         topicBasedRlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata).get();
 
-        RemoteLogSegmentMetadata followerSegmentMetadata = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(followerTopicIdPartition, Uuid.randomUuid()),
-                                                                                        0, 100, -1L, 0,
-                                                                                        time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
+        RemoteLogSegmentMetadata followerSegmentMetadata = new RemoteLogSegmentMetadata(
+                new RemoteLogSegmentId(followerTopicIdPartition, Uuid.randomUuid()),
+                0, 100, -1L, 0,
+                time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 0L));
         topicBasedRlmm().addRemoteLogSegmentMetadata(followerSegmentMetadata).get();
-
 
         // Stop TopicBasedRemoteLogMetadataManager only.
         stopTopicBasedRemoteLogMetadataManagerHarness();
@@ -134,9 +135,10 @@ public class TopicBasedRemoteLogMetadataManagerRestartTest {
                                                                  topicBasedRlmm().listRemoteLogSegments(followerTopicIdPartition)));
 
         // Add one more segment
-        RemoteLogSegmentMetadata leaderSegmentMetadata2 = new RemoteLogSegmentMetadata(new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),
-                                                                                      101, 200, -1L, 0,
-                                                                                      time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 101L));
+        RemoteLogSegmentMetadata leaderSegmentMetadata2 = new RemoteLogSegmentMetadata(
+                new RemoteLogSegmentId(leaderTopicIdPartition, Uuid.randomUuid()),
+                101, 200, -1L, 0,
+                time.milliseconds(), SEG_SIZE, Collections.singletonMap(0, 101L));
         topicBasedRlmm().addRemoteLogSegmentMetadata(leaderSegmentMetadata2).get();
 
         // Check that both the stored segment and recently added segment are available.

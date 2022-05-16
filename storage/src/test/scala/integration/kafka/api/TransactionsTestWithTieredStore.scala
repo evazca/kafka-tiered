@@ -86,8 +86,6 @@ class TransactionsTestWithTieredStore extends TransactionsTest {
       metadataConfigPrefix(TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_TOPIC_PARTITIONS_PROP), 3.toString)
     overridingProps.setProperty(
       metadataConfigPrefix(TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_TOPIC_REPLICATION_FACTOR_PROP), 2.toString)
-    overridingProps.setProperty(
-      metadataConfigPrefix(TopicBasedRemoteLogMetadataManagerConfig.REMOTE_LOG_METADATA_SECONDARY_CONSUMER_SUBSCRIPTION_INTERVAL_MS_PROP), 2000.toString)
 
     //
     // This configuration ensures inactive log segments are deleted fast enough so that

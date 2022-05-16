@@ -47,24 +47,24 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static org.apache.kafka.server.log.remote.metadata.storage.PrimaryConsumerTask.UserTopicIdPartition;
-import static org.apache.kafka.server.log.remote.metadata.storage.PrimaryConsumerTask.toRemoteLogPartition;
+import static org.apache.kafka.server.log.remote.metadata.storage.ConsumerTask.UserTopicIdPartition;
+import static org.apache.kafka.server.log.remote.metadata.storage.ConsumerTask.toRemoteLogPartition;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-class PrimaryConsumerTaskTest {
+class ConsumerTaskTest {
 
     private final int numMetadataTopicPartitions = 5;
     private final RemoteLogMetadataTopicPartitioner partitioner = new RemoteLogMetadataTopicPartitioner(numMetadataTopicPartitions);
     private final DummyEventHandler handler = new DummyEventHandler();
     private final Set<TopicPartition> remoteLogPartitions = IntStream.range(0, numMetadataTopicPartitions).boxed()
-            .map(PrimaryConsumerTask::toRemoteLogPartition).collect(Collectors.toSet());
+            .map(ConsumerTask::toRemoteLogPartition).collect(Collectors.toSet());
     private final Uuid topicId = Uuid.randomUuid();
     private final RemoteLogMetadataSerde serde = new RemoteLogMetadataSerde();
 
-    private PrimaryConsumerTask consumerTask;
+    private ConsumerTask consumerTask;
     private MockConsumer<byte[], byte[]> consumer;
     private Thread thread;
 
@@ -74,8 +74,8 @@ class PrimaryConsumerTaskTest {
                 .collect(Collectors.toMap(Function.identity(), e -> 0L));
         consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         consumer.updateBeginningOffsets(offsets);
-        PrimaryConsumerTask.pollIntervalMs = 10L;
-        consumerTask = new PrimaryConsumerTask(handler, partitioner, () -> consumer);
+        ConsumerTask.pollIntervalMs = 10L;
+        consumerTask = new ConsumerTask(handler, partitioner, () -> consumer);
         thread = new Thread(consumerTask);
     }
 
