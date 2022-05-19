@@ -720,7 +720,7 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
       fetchInfo.fetchOffsetMetadata.relativePositionInSegment)
 
     val offsetIndex = indexCache.getIndexEntry(segmentMetadata).offsetIndex
-    val upperBoundOffset = offsetIndex.fetchUpperBoundOffset(startOffsetPosition, fetchSize)
+    val upperBoundOffset = offsetIndex.get.fetchUpperBoundOffset(startOffsetPosition, fetchSize)
       .map(_.offset).getOrElse(segmentMetadata.endOffset()+1)
 
     val abortedTransactions = ListBuffer.empty[AbortedTransaction]
