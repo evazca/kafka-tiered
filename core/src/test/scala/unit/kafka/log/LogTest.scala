@@ -26,6 +26,7 @@ import java.util.{Collections, Optional, Properties}
 import kafka.api.{ApiVersion, KAFKA_0_11_0_IV0}
 import kafka.common.{OffsetsOutOfOrderException, RecordValidationException, UnexpectedAppendOffsetException}
 import kafka.log.Log.DeleteDirSuffix
+import kafka.log.remote.RemoteLogManager
 import kafka.metrics.KafkaYammerMetrics
 import kafka.server.checkpoints.LeaderEpochCheckpointFile
 import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
@@ -43,8 +44,11 @@ import org.apache.kafka.common.requests.{ListOffsetsRequest, ListOffsetsResponse
 import org.apache.kafka.common.utils.{BufferSupplier, Time, Utils}
 import org.apache.kafka.server.log.remote.storage.RemoteLogManagerConfig
 import org.easymock.EasyMock
+import org.easymock.EasyMock.anyObject
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 import scala.collection.{Iterable, Map, mutable}
 import scala.jdk.CollectionConverters._
@@ -2723,6 +2727,68 @@ class LogTest {
 
     assertEquals(Some(new TimestampAndOffset(ListOffsetsResponse.UNKNOWN_TIMESTAMP, 2L, Optional.of(2))),
       log.fetchOffsetByTimestamp(ListOffsetsRequest.LATEST_TIMESTAMP))
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = Array(true, false))
+  def testFetchOffsetByTimestampHandlesSpecialTimestamps(remoteLogEnable: Boolean): Unit = {
+    val logConfig = LogTest.createLogConfig(segmentBytes = 200, indexIntervalBytes = 1, remoteLogStorageEnable = remoteLogEnable)
+    val log = createLog(logDir, logConfig, remoteLogEnable = remoteLogEnable)
+
+    val firstTimestamp = mockTime.milliseconds
+    val firstLeaderEpoch = 0
+    log.appendAsLeader(TestUtils.singletonRecords(
+      value = TestUtils.randomBytes(10),
+      timestamp = firstTimestamp),
+      leaderEpoch = firstLeaderEpoch)
+
+    val secondTimestamp = firstTimestamp + 1
+    val secondLeaderEpoch = 1
+    log.appendAsLeader(TestUtils.singletonRecords(
+      value = TestUtils.randomBytes(10),
+      timestamp = secondTimestamp),
+      leaderEpoch = secondLeaderEpoch)
+
+    assertEquals(Some(new TimestampAndOffset(ListOffsetsResponse.UNKNOWN_TIMESTAMP, 0L, Optional.of(firstLeaderEpoch))),
+      log.fetchOffsetByTimestamp(ListOffsetsRequest.EARLIEST_TIMESTAMP))
+    assertEquals(Some(new TimestampAndOffset(ListOffsetsResponse.UNKNOWN_TIMESTAMP, 2L, Optional.of(secondLeaderEpoch))),
+      log.fetchOffsetByTimestamp(ListOffsetsRequest.LATEST_TIMESTAMP))
+
+    // The cache can be updated directly after a leader change.
+    // The new latest offset should reflect the updated epoch.
+    log.maybeAssignEpochStartOffset(2, 2L)
+
+    assertEquals(Some(new TimestampAndOffset(ListOffsetsResponse.UNKNOWN_TIMESTAMP, 2L, Optional.of(2))),
+      log.fetchOffsetByTimestamp(ListOffsetsRequest.LATEST_TIMESTAMP))
+  }
+
+  @Test
+  def testFetchOffsetByTimestampRetrievesRemoteSegmentOffsets(): Unit = {
+    val logConfig = LogTest.createLogConfig(segmentBytes = 200, indexIntervalBytes = 1, remoteLogStorageEnable = true)
+    val log = createLog(logDir, logConfig, remoteLogEnable = true)
+
+    assertThrows(classOf[KafkaException], () => log.fetchOffsetByTimestamp(0L))
+
+    val rlm: RemoteLogManager = EasyMock.niceMock(classOf[RemoteLogManager])
+    val remoteTimestampAndOffset = new TimestampAndOffset(2, 2L, Optional.of(2))
+
+    EasyMock.expect(rlm.findOffsetByTimestamp(anyObject(), anyObject(), anyObject(), anyObject()))
+      .andReturn(Some(remoteTimestampAndOffset))
+      .andReturn(None)
+    EasyMock.replay(rlm)
+
+    assertEquals(Some(remoteTimestampAndOffset), log.fetchOffsetByTimestamp(0L, Some(rlm)))
+
+    // Retrieve locally when remoteLogManager returns None
+    val firstTimestamp = mockTime.milliseconds
+    val firstLeaderEpoch = 0
+    log.appendAsLeader(TestUtils.singletonRecords(
+      value = TestUtils.randomBytes(10),
+      timestamp = firstTimestamp),
+      leaderEpoch = firstLeaderEpoch)
+
+    assertEquals(Some(new TimestampAndOffset(firstTimestamp, 0L, Optional.of(firstLeaderEpoch))),
+      log.fetchOffsetByTimestamp(firstTimestamp, Some(rlm)))
   }
 
   /**

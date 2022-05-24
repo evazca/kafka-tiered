@@ -24,6 +24,7 @@ import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.config.AbstractConfig
 import org.apache.kafka.common.errors.OffsetOutOfRangeException
+import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.requests.FetchRequest.PartitionData
 import org.apache.kafka.common.utils.Utils
@@ -36,11 +37,11 @@ import org.junit.jupiter.api.Assertions.{assertDoesNotThrow, assertEquals, asser
 import org.junit.jupiter.api.{AfterEach, Test}
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
+
 import java.io.{File, FileInputStream}
 import java.nio.file.{Files, Paths}
 import java.util.{Collections, Optional, Properties}
 import java.{lang, util}
-
 import scala.collection.{Seq, mutable}
 import scala.jdk.CollectionConverters._
 
@@ -181,6 +182,70 @@ class RemoteLogManagerTest {
       override private[remote] def createRemoteLogMetadataManager(): RemoteLogMetadataManager = rlmmManager
     }
     assertEquals(200L, remoteLogManager.findHighestRemoteOffset(topicIdPartition))
+  }
+
+  @Test
+  def testFindOffsetByTimestamp(): Unit = {
+    cache.assign(0, 0)
+    cache.assign(1, 10)
+
+    def metadata(startOffset: Int, endOffset: Int, maxTimestamp: Int): RemoteLogSegmentMetadata = {
+      val segmentLeaderEpochs = new util.HashMap[Integer, lang.Long]
+      segmentLeaderEpochs.put(0, 0) // Add mock data to satisfy constructor, but not used
+      new RemoteLogSegmentMetadata(new RemoteLogSegmentId(topicIdPartition, Uuid.randomUuid()),
+        startOffset, endOffset, maxTimestamp, brokerId,
+        -1L, 1024, segmentLeaderEpochs)
+    }
+
+    val metadata1 = metadata(0, 5, 10)
+    val metadata2 = metadata(6, 9, 20)
+    val metadata3 = metadata(10, 15, 15)
+
+    val rlmm: RemoteLogMetadataManager = niceMock(classOf[RemoteLogMetadataManager])
+    expect(rlmm.listRemoteLogSegments(topicIdPartition, 0))
+      .andAnswer(() => List(metadata1, metadata2).asJava.iterator()).anyTimes()
+    expect(rlmm.listRemoteLogSegments(topicIdPartition, 1))
+      .andAnswer(() => List(metadata3).asJava.iterator()).anyTimes()
+
+    def timestampOffsetOption(rlsm: RemoteLogSegmentMetadata): Option[TimestampAndOffset] =
+      Some(new TimestampAndOffset(rlsm.maxTimestampMs(), rlsm.endOffset(), Optional.empty()))
+
+
+
+    val tp = topicIdPartition.topicPartition()
+    val remoteLogManager = new RemoteLogManager(_ => None,
+      (_, _) => {}, rlmConfig, time, brokerId, clusterId, logsDir, brokerTopicStats) {
+      override private[remote] def createRemoteLogMetadataManager(): RemoteLogMetadataManager = rlmm
+      override def lookupTimestamp(rlsm: RemoteLogSegmentMetadata, timestamp: Long, startingOffset: Long): Option[TimestampAndOffset] =
+        timestampOffsetOption(rlsm)
+    }
+
+    val partition: Partition = niceMock(classOf[Partition])
+    expect(partition.topicPartition).andReturn(tp).anyTimes()
+    expect(partition.topic).andReturn(tp.topic()).anyTimes()
+    expect(partition.log).andReturn(None).anyTimes()
+    replay(rlmm, partition)
+
+    // Load topic
+    remoteLogManager.onLeadershipChange(Set(partition), Set(), Collections.singletonMap(tp.topic(), topicIdPartition.topicId()))
+
+    // Non-existent topic
+    assertThrows(classOf[KafkaException], () => remoteLogManager.findOffsetByTimestamp(
+      new TopicPartition("non-existent", 0), 0, 0, cache))
+    // In first segment of first leader epoch
+    assertEquals(timestampOffsetOption(metadata1), remoteLogManager.findOffsetByTimestamp(tp, 5, 5, cache))
+    // In second segment of first leader epoch
+    assertEquals(timestampOffsetOption(metadata2), remoteLogManager.findOffsetByTimestamp(tp, 15, 5, cache))
+    // In next leader epoch
+    assertEquals(timestampOffsetOption(metadata3), remoteLogManager.findOffsetByTimestamp(tp, 5, 10, cache))
+    // When timestamps not monotonic
+    assertEquals(timestampOffsetOption(metadata2), remoteLogManager.findOffsetByTimestamp(tp, 15, 8, cache))
+    assertEquals(timestampOffsetOption(metadata3), remoteLogManager.findOffsetByTimestamp(tp, 15, 10, cache))
+    // When no such offsets exist
+    assertEquals(None, remoteLogManager.findOffsetByTimestamp(tp, 20, 10, cache))
+    assertEquals(None, remoteLogManager.findOffsetByTimestamp(tp, 16, 15, cache))
+    assertEquals(None, remoteLogManager.findOffsetByTimestamp(tp, 0, 25, cache))
+    assertEquals(None, remoteLogManager.findOffsetByTimestamp(tp, 30, 0, cache))
   }
 
   @Test
