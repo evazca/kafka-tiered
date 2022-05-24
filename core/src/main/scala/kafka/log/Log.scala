@@ -323,9 +323,11 @@ class Log(@volatile private var _dir: File,
 
   @volatile var topicId : Uuid = Uuid.ZERO_UUID
 
-  @volatile private var localLogStartOffset: Long = logStartOffset
+  @volatile private var _localLogStartOffset: Long = logStartOffset
 
   @volatile private var highestOffsetWithRemoteIndex: Long = -1L
+
+  private[log] def localLogStartOffset: Long = _localLogStartOffset
 
   private[kafka] def remoteLogEnabled(): Boolean = {
     // remote logging is enabled only for non-compact and non-internal topics
@@ -871,7 +873,7 @@ class Log(@volatile private var _dir: File,
   }
 
   private def updateLocalLogStartOffset(offset: Long): Unit = {
-    localLogStartOffset = offset
+    _localLogStartOffset = offset
 
     if (highWatermark < offset) {
       updateHighWatermark(offset)
@@ -1455,7 +1457,7 @@ class Log(@volatile private var _dir: File,
 
         checkIfMemoryMappedBufferClosed()
         if (newLogStartOffset > logStartOffset) {
-          localLogStartOffset = math.max(newLogStartOffset, localLogStartOffset)
+          _localLogStartOffset = math.max(newLogStartOffset, localLogStartOffset)
 
           // it should always get updated  if tiered-storage is not enabled.
           if (!onlyLocalLogStartOffsetUpdate || !remoteLogEnabled()) {
@@ -2293,7 +2295,7 @@ class Log(@volatile private var _dir: File,
             removeAndDeleteSegments(deletable, asyncDelete = true, LogTruncation)
             activeSegment.truncateTo(targetOffset)
 
-            this.localLogStartOffset = math.min(targetOffset, this.localLogStartOffset)
+            this._localLogStartOffset = math.min(targetOffset, this.localLogStartOffset)
             updateLogStartOffset(math.min(this.localLogStartOffset, this.logStartOffset))
 
             leaderEpochCache.foreach(_.truncateFromEnd(targetOffset))
@@ -2313,27 +2315,37 @@ class Log(@volatile private var _dir: File,
   /**
    *  Delete all data in the log and start at the new offset
    *
-   *  @param newOffset The new offset to start the log with
+   * The caller of this function is responsible for providing a value for logStartOffset when it differs from
+   * newLocalLogStartOffset. This would manifest in a scenario when topic has remote log enabled, offsets before the
+   * localLogStartOffset may reside only in the remote log and not in local log. In such cases, the invariant that
+   * logStartOffset = localLogStartOffset does not hold true.
+   *
+   *  @param newLocalLogStartOffset The new offset to start the local log with. This offset becomes the local log start
+   *                                offset after truncation is complete.
+   *  @param logStartOffset Log start offset for the topic. Defaults to value of newLocalLogStartOffset if not set by
+   *                        the caller.
    */
-  def truncateFullyAndStartAt(newOffset: Long): Unit = {
+  def truncateFullyAndStartAt(newLocalLogStartOffset: Long, logStartOffset: Option[Long] = None): Unit = {
     maybeHandleIOException(s"Error while truncating the entire log for $topicPartition in dir ${dir.getParent}") {
-      debug(s"Truncate and start at offset $newOffset")
+      debug(s"Truncate and start at local offset $newLocalLogStartOffset for $topicPartition. Start offset $logStartOffset.")
+
       lock synchronized {
         checkIfMemoryMappedBufferClosed()
         removeAndDeleteSegments(logSegments, asyncDelete = true, LogTruncation)
         addSegment(LogSegment.open(dir,
-          baseOffset = newOffset,
+          baseOffset = newLocalLogStartOffset,
           config = config,
           time = time,
           initFileSize = initFileSize,
           preallocate = config.preallocate))
         leaderEpochCache.foreach(_.clearAndFlush())
-        producerStateManager.truncateFullyAndStartAt(newOffset)
+        producerStateManager.truncateFullyAndStartAt(newLocalLogStartOffset)
 
+        val newStartOffset = logStartOffset getOrElse newLocalLogStartOffset
         completeTruncation(
-          startOffset = newOffset,
-          localLogStartOffset = newOffset,
-          endOffset = newOffset
+          startOffset = newStartOffset,
+          localLogStartOffset = newLocalLogStartOffset,
+          endOffset = newLocalLogStartOffset
         )
       }
     }

@@ -575,10 +575,13 @@ class LogManager(logDirs: Seq[File],
    * Delete all data in a partition and start the log at the new offset
    *
    * @param topicPartition The partition whose log needs to be truncated
-   * @param newOffset The new offset to start the log with
+   * @param newLocalLogStartOffset The new offset to start the local log with
    * @param isFuture True iff the truncation should be performed on the future log of the specified partition
+   * @param logStartOffset Log start offset for the topic. Note that localLogStartOffset may not be equal to
+   *                        LogStartOffset if the topic has RemoteLogEnabled
    */
-  def truncateFullyAndStartAt(topicPartition: TopicPartition, newOffset: Long, isFuture: Boolean): Unit = {
+  def truncateFullyAndStartAt(topicPartition: TopicPartition, newLocalLogStartOffset: Long, isFuture: Boolean,
+                              logStartOffset: Option[Long] = None): Unit = {
     val log = {
       if (isFuture)
         futureLogs.get(topicPartition)
@@ -591,7 +594,7 @@ class LogManager(logDirs: Seq[File],
       if (!isFuture)
         abortAndPauseCleaning(topicPartition)
       try {
-        log.truncateFullyAndStartAt(newOffset)
+        log.truncateFullyAndStartAt(newLocalLogStartOffset, logStartOffset)
         if (!isFuture)
           maybeTruncateCleanerCheckpointToActiveSegmentBaseOffset(log, topicPartition)
       } finally {

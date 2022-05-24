@@ -212,9 +212,9 @@ class ReplicaAlterLogDirsThread(name: String,
     partition.truncateTo(truncationState.offset, isFuture = true)
   }
 
-  override protected def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long): Unit = {
+  override protected def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long, logStartOffset: Option[Long] = None): Unit = {
     val partition = replicaMgr.getPartitionOrException(topicPartition)
-    partition.truncateFullyAndStartAt(offset, isFuture = true)
+    partition.truncateFullyAndStartAt(offset, isFuture = true, logStartOffset)
   }
 
   private def nextReadyPartition(partitionMap: Map[TopicPartition, PartitionFetchState]): Option[(TopicPartition, PartitionFetchState)] = {

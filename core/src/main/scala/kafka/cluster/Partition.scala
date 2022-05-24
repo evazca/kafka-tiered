@@ -1288,14 +1288,16 @@ class Partition(val topicPartition: TopicPartition,
   /**
     * Delete all data in the local log of this partition and start the log at the new offset
     *
-    * @param newOffset The new offset to start the log with
+    * @param newOffset The new offset to start the local log with
     * @param isFuture True iff the truncation should be performed on the future log of this partition
+    * @param logStartOffset Log start offset for the topic. Note that localLogStartOffset may not be equal to
+    *                       LogStartOffset if the topic has RemoteLogEnabled
     */
-  def truncateFullyAndStartAt(newOffset: Long, isFuture: Boolean): Unit = {
+  def truncateFullyAndStartAt(newOffset: Long, isFuture: Boolean, logStartOffset: Option[Long] = None): Unit = {
     // The read lock is needed to prevent the follower replica from being truncated while ReplicaAlterDirThread
     // is executing maybeReplaceCurrentWithFutureReplica() to replace follower replica with the future replica.
     inReadLock(leaderIsrUpdateLock) {
-      logManager.truncateFullyAndStartAt(topicPartition, newOffset, isFuture = isFuture)
+      logManager.truncateFullyAndStartAt(topicPartition, newOffset, isFuture = isFuture, logStartOffset)
     }
   }
 
