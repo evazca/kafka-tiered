@@ -327,7 +327,7 @@ class Log(@volatile private var _dir: File,
 
   @volatile private var highestOffsetWithRemoteIndex: Long = -1L
 
-  private[log] def localLogStartOffset: Long = _localLogStartOffset
+  private[kafka] def localLogStartOffset: Long = _localLogStartOffset
 
   private[kafka] def remoteLogEnabled(): Boolean = {
     // remote logging is enabled only for non-compact and non-internal topics
