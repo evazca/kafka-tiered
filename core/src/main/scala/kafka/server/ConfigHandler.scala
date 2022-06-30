@@ -71,18 +71,30 @@ class TopicConfigHandler(private val replicaManager: ReplicaManager,
       val logConfig = LogConfig.fromProps(logManager.currentDefaultConfig.originals, props)
       val wasRemoteLogEnabledBeforeUpdate = logs.head.remoteLogEnabled()
       logs.foreach(_.updateConfig(logConfig))
-      // In Kafka v2.8, there is a bug when reading the topicId from the Log. The first LeaderAndIsr notification
-      // doesn't set the topic-id in the Log which results to Uuid.ZERO_UUID. This has been fixed in the trunk.
-      // So, loading the topic-id from ZK directly.
-      replicaManager.zkClient.map(_.getTopicIdsForTopics(Predef.Set(topic))).foreach { topicIds =>
-        maybeBootstrapRemoteLogComponents(topicIds, logs, wasRemoteLogEnabledBeforeUpdate)
-      }
+      maybeBootstrapRemoteLogComponents(topic, logs, wasRemoteLogEnabledBeforeUpdate)
     }
   }
 
-  private[server] def maybeBootstrapRemoteLogComponents(topicIds: Map[String, Uuid],
+  private[server] def maybeBootstrapRemoteLogComponents(topic: String,
                                                         logs: Seq[Log],
                                                         wasRemoteLogEnabledBeforeUpdate: Boolean): Unit = {
+
+    def maybeFetchTopicId(topic: String, logs: Seq[Log]): Map[String, Uuid] = {
+      val topicId = replicaManager.zkClient.getOrElse(throw new ConfigException(LogConfig.RemoteLogStorageEnableProp,
+        logs.head.remoteLogEnabled(), s"Error occurred while setting the configuration as ZkClient is missing"))
+        .getTopicIdsForTopics(Predef.Set(topic))
+        .filter(entry => entry._2 != Uuid.ZERO_UUID)
+        .getOrElse(topic, throw new ConfigException(LogConfig.RemoteLogStorageEnableProp,
+          logs.head.remoteLogEnabled(), s"Error occurred while setting the configuration due to unavailability of topic ids for $topic"))
+
+      Map(topic -> topicId)
+    }
+
+    // In Kafka v2.8, there is a bug when reading the topicId from the Log. The first LeaderAndIsr notification
+    // doesn't set the topic-id in the Log which results to Uuid.ZERO_UUID. This has been fixed in the trunk.
+    // So, loading the topic-id from ZK directly.
+    val topicIds = maybeFetchTopicId(topic, logs)
+
     val isRemoteLogEnabled = logs.head.remoteLogEnabled()
     // Topic configs gets updated incrementally. This check is added to prevent redundant updates.
     if (!wasRemoteLogEnabledBeforeUpdate && isRemoteLogEnabled) {
