@@ -1056,7 +1056,7 @@ class AbstractFetcherThreadTest {
       state.highWatermark = math.min(state.highWatermark, state.logEndOffset)
     }
 
-    override def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long): Unit = {
+    override def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long, newOffset: Option[Long] = None): Unit = {
       val state = replicaPartitionState(topicPartition)
       state.log.clear()
       if (state.rlmEnabled) {

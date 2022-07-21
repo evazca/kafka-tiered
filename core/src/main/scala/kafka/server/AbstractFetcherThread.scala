@@ -82,7 +82,7 @@ abstract class AbstractFetcherThread(name: String,
 
   protected def truncate(topicPartition: TopicPartition, truncationState: OffsetTruncationState): Unit
 
-  protected def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long): Unit
+  protected def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long, logStartOffset: Option[Long] = None): Unit
 
   protected def buildFetch(partitionMap: Map[TopicPartition, PartitionFetchState]): ResultWithPartitions[Option[ReplicaFetch]]
 

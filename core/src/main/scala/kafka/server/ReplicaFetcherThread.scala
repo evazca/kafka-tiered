@@ -334,9 +334,10 @@ class ReplicaFetcherThread(name: String,
         offsetTruncationState.offset)
   }
 
-  override protected def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long): Unit = {
+  override protected def truncateFullyAndStartAt(topicPartition: TopicPartition, offset: Long,
+                                                 logStartOffset: Option[Long] = None): Unit = {
     val partition = replicaMgr.getPartitionOrException(topicPartition)
-    partition.truncateFullyAndStartAt(offset, isFuture = false)
+    partition.truncateFullyAndStartAt(offset, isFuture = false, logStartOffset)
   }
 
   override def fetchEpochEndOffsets(partitions: Map[TopicPartition, EpochData]): Map[TopicPartition, EpochEndOffset] = {
@@ -419,7 +420,7 @@ class ReplicaFetcherThread(name: String,
             val epochs = readLeaderEpochCheckpoint(epochStream)
 
             // Truncate the existing local log before restoring the leader epoch cache and producer snapshots.
-            truncateFullyAndStartAt(partition, leaderLocalLogStartOffset)
+            truncateFullyAndStartAt(partition, leaderLocalLogStartOffset, Some(leaderLogStartOffset))
 
             log.maybeIncrementLogStartOffset(leaderLogStartOffset, LeaderOffsetIncremented)
             epochs.foreach(epochEntry => {

@@ -2338,29 +2338,39 @@ class Log(@volatile private var _dir: File,
   }
 
   /**
-   *  Delete all data in the log and start at the new offset
+   * Delete all data in the log and start at the new offset
    *
-   *  @param newOffset The new offset to start the log with
+   * The caller of this function is responsible for providing a value for logStartOffset when it differs from
+   * newLocalLogStartOffset. This would manifest in a scenario when topic has remote log enabled, offsets before the
+   * localLogStartOffset may reside only in the remote log and not in local log. In such cases, the invariant that
+   * logStartOffset = localLogStartOffset does not hold true.
+   *
+   *  @param newLocalLogStartOffset The new offset to start the local log with. This offset becomes the local log start
+   *                                offset after truncation is complete.
+   *  @param logStartOffset Log start offset for the topic. Defaults to value of newLocalLogStartOffset if not set by
+   *                        the caller.
    */
-  def truncateFullyAndStartAt(newOffset: Long): Unit = {
+  def truncateFullyAndStartAt(newLocalLogStartOffset: Long, logStartOffset: Option[Long] = None): Unit = {
     maybeHandleIOException(s"Error while truncating the entire log for $topicPartition in dir ${dir.getParent}") {
-      debug(s"Truncate and start at offset $newOffset")
+      debug(s"Truncate and start at offset $newLocalLogStartOffset")
+
       lock synchronized {
         checkIfMemoryMappedBufferClosed()
         removeAndDeleteSegments(logSegments, asyncDelete = true, LogTruncation)
         addSegment(LogSegment.open(dir,
-          baseOffset = newOffset,
+          baseOffset = newLocalLogStartOffset,
           config = config,
           time = time,
           initFileSize = initFileSize,
           preallocate = config.preallocate))
         leaderEpochCache.foreach(_.clearAndFlush())
-        producerStateManager.truncateFullyAndStartAt(newOffset)
+        producerStateManager.truncateFullyAndStartAt(newLocalLogStartOffset)
 
+        val newStartOffset = logStartOffset getOrElse newLocalLogStartOffset
         completeTruncation(
-          startOffset = newOffset,
-          localLogStartOffset = newOffset,
-          endOffset = newOffset
+          startOffset = newStartOffset,
+          localLogStartOffset = newLocalLogStartOffset,
+          endOffset = newLocalLogStartOffset
         )
       }
     }
