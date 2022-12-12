@@ -26,6 +26,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * A wrapper class of {@link RemoteLogMetadataManager} that sets the context class loader when calling the respective
+ * methods.
+ */
 public class ClassLoaderAwareRemoteLogMetadataManager implements RemoteLogMetadataManager {
     private final RemoteLogMetadataManager delegate;
     private final ClassLoader loader;
