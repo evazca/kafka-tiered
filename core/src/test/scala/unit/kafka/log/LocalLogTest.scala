@@ -22,13 +22,14 @@ import java.nio.channels.ClosedChannelException
 import java.nio.charset.StandardCharsets
 import java.util.regex.Pattern
 import java.util.Collections
-import kafka.server.{FetchDataInfo, KafkaConfig, LogDirFailureChannel, LogOffsetMetadata}
+import kafka.server.{FetchDataInfo, KafkaConfig, LogDirFailureChannel}
 import kafka.utils.{MockTime, Scheduler, TestUtils}
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 import org.apache.kafka.common.errors.KafkaStorageException
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, Record, SimpleRecord}
 import org.apache.kafka.common.utils.{Time, Utils}
-import org.junit.jupiter.api.Assertions.{assertFalse, _}
+import org.apache.kafka.server.log.internals.LogOffsetMetadata
+import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 
 import scala.jdk.CollectionConverters._
