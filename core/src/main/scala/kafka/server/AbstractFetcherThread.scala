@@ -23,7 +23,7 @@ import kafka.metrics.KafkaMetricsGroup
 import kafka.server.AbstractFetcherThread.{ReplicaFetch, ResultWithPartitions}
 import kafka.utils.CoreUtils.inLock
 import kafka.utils.Implicits._
-import kafka.utils.{DelayedItem, Pool, ShutdownableThread}
+import kafka.utils.{DelayedItem, Pool}
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.PartitionStates
 import org.apache.kafka.common.message.OffsetForLeaderEpochResponseData.EpochEndOffset
@@ -33,6 +33,7 @@ import org.apache.kafka.common.record.{FileRecords, MemoryRecords, Records}
 import org.apache.kafka.common.requests.OffsetsForLeaderEpochResponse.{UNDEFINED_EPOCH, UNDEFINED_EPOCH_OFFSET}
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.{InvalidRecordException, TopicPartition, Uuid}
+import org.apache.kafka.utils.ShutdownableThread
 
 import java.nio.ByteBuffer
 import java.util

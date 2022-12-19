@@ -21,11 +21,11 @@ import java.lang.management.ManagementFactory
 import java.lang.management.OperatingSystemMXBean
 import java.util.Random
 import java.util.concurrent._
-
 import joptsimple._
 import kafka.server.{DelayedOperation, DelayedOperationPurgatory}
 import kafka.utils._
 import org.apache.kafka.common.utils.Time
+import org.apache.kafka.utils.ShutdownableThread
 
 import scala.math._
 import scala.jdk.CollectionConverters._

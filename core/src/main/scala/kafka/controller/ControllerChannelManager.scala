@@ -18,7 +18,6 @@ package kafka.controller
 
 import java.net.SocketTimeoutException
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
-
 import com.yammer.metrics.core.{Gauge, Timer}
 import kafka.api._
 import kafka.cluster.Broker
@@ -39,6 +38,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol
 import org.apache.kafka.common.utils.{LogContext, Time}
 import org.apache.kafka.common.{KafkaException, Node, Reconfigurable, TopicPartition, Uuid}
 import org.apache.kafka.server.common.MetadataVersion._
+import org.apache.kafka.utils.ShutdownableThread
 
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.HashMap

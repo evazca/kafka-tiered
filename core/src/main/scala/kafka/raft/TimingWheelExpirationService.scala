@@ -17,11 +17,10 @@
 package kafka.raft
 
 import java.util.concurrent.CompletableFuture
-
-import kafka.utils.ShutdownableThread
 import kafka.utils.timer.{Timer, TimerTask}
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.raft.ExpirationService
+import org.apache.kafka.utils.ShutdownableThread
 
 object TimingWheelExpirationService {
   private val WorkTimeoutMs: Long = 200L

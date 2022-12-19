@@ -18,13 +18,13 @@ package kafka.common
 
 import java.util.Map.Entry
 import java.util.{ArrayDeque, ArrayList, Collection, Collections, HashMap, Iterator}
-import kafka.utils.ShutdownableThread
 import org.apache.kafka.clients.{ClientRequest, ClientResponse, KafkaClient, RequestCompletionHandler}
 import org.apache.kafka.common.Node
 import org.apache.kafka.common.errors.{AuthenticationException, DisconnectException}
 import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.requests.AbstractRequest
 import org.apache.kafka.common.utils.Time
+import org.apache.kafka.utils.ShutdownableThread
 
 import scala.jdk.CollectionConverters._
 

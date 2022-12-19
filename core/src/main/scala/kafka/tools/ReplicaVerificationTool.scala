@@ -32,6 +32,8 @@ import org.apache.kafka.common.requests.{AbstractRequest, FetchResponse, ListOff
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.utils.{LogContext, Time}
 import org.apache.kafka.common.{Node, TopicPartition, Uuid}
+import org.apache.kafka.utils.ShutdownableThread
+
 import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
 import java.util
@@ -39,7 +41,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.regex.{Pattern, PatternSyntaxException}
 import java.util.{Date, Optional, Properties}
-
 import scala.collection.Seq
 import scala.jdk.CollectionConverters._
 

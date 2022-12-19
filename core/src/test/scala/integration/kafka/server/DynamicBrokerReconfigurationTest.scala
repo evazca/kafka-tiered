@@ -62,6 +62,7 @@ import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializ
 import org.apache.kafka.server.metrics.KafkaYammerMetrics
 import org.apache.kafka.server.record.BrokerCompressionType
 import org.apache.kafka.test.{TestSslUtils, TestUtils => JTestUtils}
+import org.apache.kafka.utils.ShutdownableThread
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Disabled, Test, TestInfo}
 import org.junit.jupiter.params.ParameterizedTest

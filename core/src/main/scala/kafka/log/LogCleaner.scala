@@ -33,6 +33,7 @@ import org.apache.kafka.common.record.MemoryRecords.RecordFilter.BatchRetention
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{BufferSupplier, Time}
 import org.apache.kafka.server.log.internals.{AbortedTxn, TransactionIndex}
+import org.apache.kafka.utils.ShutdownableThread
 
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ListBuffer

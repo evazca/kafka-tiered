@@ -25,7 +25,7 @@ import kafka.log.{AppendOrigin, LogConfig}
 import kafka.server.metadata.KRaftMetadataCache
 import kafka.server.metadata.MockConfigRepository
 import kafka.utils.TestUtils.waitUntilTrue
-import kafka.utils.{MockTime, ShutdownableThread, TestUtils}
+import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.metadata.RegisterBrokerRecord
 import org.apache.kafka.common.metadata.{PartitionChangeRecord, PartitionRecord, TopicRecord}
 import org.apache.kafka.common.metrics.Metrics
@@ -39,6 +39,7 @@ import org.apache.kafka.common.{IsolationLevel, TopicIdPartition, TopicPartition
 import org.apache.kafka.image.{MetadataDelta, MetadataImage}
 import org.apache.kafka.metadata.LeaderRecoveryState
 import org.apache.kafka.metadata.PartitionRegistration
+import org.apache.kafka.utils.ShutdownableThread
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, Test}
 import org.mockito.Mockito

@@ -20,10 +20,11 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
-import kafka.utils.{Logging, ShutdownableThread}
+import kafka.utils.Logging
 import kafka.zk.{KafkaZkClient, StateChangeHandlers}
 import kafka.zookeeper.{StateChangeHandler, ZNodeChildChangeHandler}
 import org.apache.kafka.common.utils.Time
+import org.apache.kafka.utils.ShutdownableThread
 
 import scala.collection.Seq
 import scala.util.{Failure, Try}

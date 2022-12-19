@@ -25,8 +25,8 @@ import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.locks.ReentrantLock
 import kafka.metrics.KafkaMetricsGroup
 import kafka.utils.CoreUtils.inLock
-import kafka.utils.ShutdownableThread
 import org.apache.kafka.common.utils.Time
+import org.apache.kafka.utils.ShutdownableThread
 
 import scala.collection._
 
