@@ -26,7 +26,7 @@ import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
 import org.apache.kafka.common.record.{RecordBatch, RemoteLogInputStream}
 import org.apache.kafka.common.utils.{ChildFirstClassLoader, Utils}
 import org.apache.kafka.server.log.remote.metadata.storage.ClassLoaderAwareRemoteLogMetadataManager
-import org.apache.kafka.server.log.remote.storage.{ClassLoaderAwareRemoteStorageManager, RemoteLogManagerConfig, RemoteLogMetadataManager, RemoteLogSegmentMetadata, RemoteStorageManager}
+import org.apache.kafka.server.log.remote.storage.{ClassLoaderAwareRemoteStorageManager, RemoteIndexCache, RemoteLogManagerConfig, RemoteLogMetadataManager, RemoteLogSegmentMetadata, RemoteStorageManager}
 
 import java.io.{Closeable, InputStream}
 import java.security.{AccessController, PrivilegedAction}
@@ -56,7 +56,7 @@ class RemoteLogManager(rlmConfig: RemoteLogManagerConfig,
   private val remoteLogStorageManager: RemoteStorageManager = createRemoteStorageManager()
   private val remoteLogMetadataManager: RemoteLogMetadataManager = createRemoteLogMetadataManager()
 
-  private val indexCache = new RemoteIndexCache(remoteStorageManager = remoteLogStorageManager, logDir = logDir)
+  private val indexCache = new RemoteIndexCache(remoteLogStorageManager, logDir)
 
   private var closed = false
 

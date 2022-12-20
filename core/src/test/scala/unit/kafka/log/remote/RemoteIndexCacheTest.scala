@@ -21,7 +21,7 @@ import kafka.utils.MockTime
 import org.apache.kafka.common.{TopicIdPartition, TopicPartition, Uuid}
 import org.apache.kafka.server.log.internals.{OffsetIndex, OffsetPosition, TimeIndex}
 import org.apache.kafka.server.log.remote.storage.RemoteStorageManager.IndexType
-import org.apache.kafka.server.log.remote.storage.{RemoteLogSegmentId, RemoteLogSegmentMetadata, RemoteStorageManager}
+import org.apache.kafka.server.log.remote.storage.{RemoteIndexCache, RemoteLogSegmentId, RemoteLogSegmentMetadata, RemoteStorageManager}
 import org.apache.kafka.test.TestUtils
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
@@ -47,7 +47,7 @@ class RemoteIndexCacheTest {
   val segmentSize = 1024
 
   val rsm: RemoteStorageManager = mock(classOf[RemoteStorageManager])
-  val cache: RemoteIndexCache =  new RemoteIndexCache(remoteStorageManager = rsm, logDir = logDir.toString)
+  val cache: RemoteIndexCache =  new RemoteIndexCache(rsm, logDir.toString)
   val remoteLogSegmentId = new RemoteLogSegmentId(idPartition, Uuid.randomUuid())
   val rlsMetadata: RemoteLogSegmentMetadata = new RemoteLogSegmentMetadata(remoteLogSegmentId, baseOffset, lastOffset,
     time.milliseconds(), brokerId, time.milliseconds(), segmentSize, Collections.singletonMap(0, 0L))
@@ -80,13 +80,13 @@ class RemoteIndexCacheTest {
   @AfterEach
   def cleanup(): Unit = {
     reset(rsm)
-    cache.entries.forEach((_, v) => v.cleanup())
+    cache.entries().forEach((_, v) => v.cleanup())
     cache.close()
   }
 
   @Test
   def testFetchIndexFromRemoteStorage(): Unit = {
-    val offsetIndex = cache.getIndexEntry(rlsMetadata).offsetIndex.get
+    val offsetIndex = cache.getIndexEntry(rlsMetadata).offsetIndex.get()
     val offsetPosition1 = offsetIndex.entry(1)
     // this call should have invoked fetchOffsetIndex, fetchTimestampIndex once
     val resultPosition = cache.lookupOffset(rlsMetadata, offsetPosition1.offset)
@@ -104,7 +104,7 @@ class RemoteIndexCacheTest {
 
   @Test
   def testPositionForNonExistingIndexFromRemoteStorage(): Unit = {
-    val offsetIndex = cache.getIndexEntry(rlsMetadata).offsetIndex.get
+    val offsetIndex = cache.getIndexEntry(rlsMetadata).offsetIndex.get()
     val lastOffsetPosition = cache.lookupOffset(rlsMetadata, offsetIndex.lastOffset)
     val greaterOffsetThanLastOffset = offsetIndex.lastOffset + 1
     assertEquals(lastOffsetPosition, cache.lookupOffset(rlsMetadata, greaterOffsetThanLastOffset))
@@ -117,7 +117,7 @@ class RemoteIndexCacheTest {
 
   @Test
   def testCacheEntryExpiry(): Unit = {
-    val cache = new RemoteIndexCache(maxSize = 2, rsm, logDir = logDir.toString)
+    val cache = new RemoteIndexCache(2, rsm, logDir.toString)
     val tpId = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo", 0))
     val metadataList = generateRemoteLogSegmentMetadata(size = 3, tpId)
 
@@ -125,40 +125,40 @@ class RemoteIndexCacheTest {
     cache.getIndexEntry(metadataList.head)
     // Calling getIndex on the same entry should not call rsm#fetchIndex again, but it should retrieve from cache
     cache.getIndexEntry(metadataList.head)
-    assertEquals(1, cache.entries.size())
+    assertEquals(1, cache.entries().size())
     verifyFetchIndexInvocation(count = 1)
 
     // Here a new key metadataList(1) is invoked, that should call rsm#fetchIndex, making the count to 2
     cache.getIndexEntry(metadataList.head)
     cache.getIndexEntry(metadataList(1))
-    assertEquals(2, cache.entries.size())
+    assertEquals(2, cache.entries().size())
     verifyFetchIndexInvocation(count = 2)
 
     // getting index for metadataList.last should call rsm#fetchIndex, but metadataList(1) is already in cache.
     cache.getIndexEntry(metadataList.last)
     cache.getIndexEntry(metadataList(1))
-    assertEquals(2, cache.entries.size())
-    assertTrue(cache.entries.containsKey(metadataList.last.remoteLogSegmentId().id()))
-    assertTrue(cache.entries.containsKey(metadataList(1).remoteLogSegmentId().id()))
+    assertEquals(2, cache.entries().size())
+    assertTrue(cache.entries().containsKey(metadataList.last.remoteLogSegmentId().id()))
+    assertTrue(cache.entries().containsKey(metadataList(1).remoteLogSegmentId().id()))
     verifyFetchIndexInvocation(count = 3)
 
     // getting index for metadataList.head should call rsm#fetchIndex as that entry was expired earlier,
     // but metadataList(1) is already in cache.
     cache.getIndexEntry(metadataList(1))
     cache.getIndexEntry(metadataList.head)
-    assertEquals(2, cache.entries.size())
-    assertFalse(cache.entries.containsKey(metadataList.last.remoteLogSegmentId().id()))
+    assertEquals(2, cache.entries().size())
+    assertFalse(cache.entries().containsKey(metadataList.last.remoteLogSegmentId().id()))
     verifyFetchIndexInvocation(count = 4)
   }
 
   @Test
   def testGetIndexAfterCacheClose(): Unit = {
-    val cache = new RemoteIndexCache(maxSize = 2, rsm, logDir = logDir.toString)
+    val cache = new RemoteIndexCache(2, rsm, logDir.toString)
     val tpId = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo", 0))
     val metadataList = generateRemoteLogSegmentMetadata(size = 3, tpId)
 
     cache.getIndexEntry(metadataList.head)
-    assertEquals(1, cache.entries.size())
+    assertEquals(1, cache.entries().size())
     verifyFetchIndexInvocation(count = 1)
 
     cache.close()
@@ -169,7 +169,7 @@ class RemoteIndexCacheTest {
 
   @Test
   def testReloadCacheAfterClose(): Unit = {
-    val cache = new RemoteIndexCache(maxSize = 2, rsm, logDir = logDir.toString)
+    val cache = new RemoteIndexCache(2, rsm, logDir.toString)
     val tpId = new TopicIdPartition(Uuid.randomUuid(), new TopicPartition("foo", 0))
     val metadataList = generateRemoteLogSegmentMetadata(size = 3, tpId)
 
@@ -177,29 +177,29 @@ class RemoteIndexCacheTest {
     cache.getIndexEntry(metadataList.head)
     // Calling getIndex on the same entry should not call rsm#fetchIndex again, but it should retrieve from cache
     cache.getIndexEntry(metadataList.head)
-    assertEquals(1, cache.entries.size())
+    assertEquals(1, cache.entries().size())
     verifyFetchIndexInvocation(count = 1)
 
     // Here a new key metadataList(1) is invoked, that should call rsm#fetchIndex, making the count to 2
     cache.getIndexEntry(metadataList(1))
     // Calling getIndex on the same entry should not call rsm#fetchIndex again, but it should retrieve from cache
     cache.getIndexEntry(metadataList(1))
-    assertEquals(2, cache.entries.size())
+    assertEquals(2, cache.entries().size())
     verifyFetchIndexInvocation(count = 2)
 
     // Here a new key metadataList(2) is invoked, that should call rsm#fetchIndex, making the count to 2
     cache.getIndexEntry(metadataList(2))
     // Calling getIndex on the same entry should not call rsm#fetchIndex again, but it should retrieve from cache
     cache.getIndexEntry(metadataList(2))
-    assertEquals(2, cache.entries.size())
+    assertEquals(2, cache.entries().size())
     verifyFetchIndexInvocation(count = 3)
 
     // Close the cache
     cache.close()
 
     // Reload the cache from the disk and check the cache size is same as earlier
-    val reloadedCache = new RemoteIndexCache(maxSize = 2, rsm, logDir = logDir.toString)
-    assertEquals(2, reloadedCache.entries.size())
+    val reloadedCache = new RemoteIndexCache(2, rsm, logDir.toString)
+    assertEquals(2, reloadedCache.entries().size())
     reloadedCache.close()
   }
 
@@ -211,8 +211,7 @@ class RemoteIndexCacheTest {
     }
   }
 
-  private def generateRemoteLogSegmentMetadata(size: Int,
-                                               tpId: TopicIdPartition): List[RemoteLogSegmentMetadata] = {
+  private def generateRemoteLogSegmentMetadata(size: Int, tpId: TopicIdPartition): List[RemoteLogSegmentMetadata] = {
     val metadataList = mutable.Buffer.empty[RemoteLogSegmentMetadata]
     for (i <- 0 until size) {
       metadataList.append(new RemoteLogSegmentMetadata(new RemoteLogSegmentId(tpId, Uuid.randomUuid()), baseOffset * i,

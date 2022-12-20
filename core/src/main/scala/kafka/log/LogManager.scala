@@ -18,7 +18,6 @@
 package kafka.log
 
 import kafka.log.LogConfig.MessageFormatVersion
-import kafka.log.remote.RemoteIndexCache
 
 import java.io._
 import java.nio.file.Files
@@ -42,6 +41,7 @@ import kafka.utils.Implicits._
 import java.util.Properties
 
 import org.apache.kafka.server.common.MetadataVersion
+import org.apache.kafka.server.log.remote.storage.RemoteIndexCache
 
 import scala.annotation.nowarn
 

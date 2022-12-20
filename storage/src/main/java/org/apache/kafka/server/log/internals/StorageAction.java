@@ -23,6 +23,6 @@ package org.apache.kafka.server.log.internals;
  * @param <E> Exception type to be thrown
  */
 @FunctionalInterface
-public interface StorageAction<T, E extends Exception> {
+public interface StorageAction<T, E extends Throwable> {
     T execute() throws E;
 }
