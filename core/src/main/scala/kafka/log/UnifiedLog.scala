@@ -42,7 +42,7 @@ import org.apache.kafka.common.utils.{PrimitiveRef, Time, Utils}
 import org.apache.kafka.common.{InvalidRecordException, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.IBP_0_10_0_IV0
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LogDirFailureChannel, LogOffsetMetadata, LogValidator}
+import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LastRecord, LogDirFailureChannel, LogOffsetMetadata, LogValidator}
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.record.BrokerCompressionType
 
@@ -237,7 +237,7 @@ case object SnapshotGenerated extends LogStartOffsetIncrementReason {
  */
 @threadsafe
 class UnifiedLog(@volatile var logStartOffset: Long,
-                 private[log] val localLog: LocalLog,
+                 private val localLog: LocalLog,
                  brokerTopicStats: BrokerTopicStats,
                  val producerIdExpirationCheckIntervalMs: Int,
                  @volatile var leaderEpochCache: Option[LeaderEpochFileCache],
@@ -324,7 +324,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         try partMetadataFile.delete()
         catch {
           case e: IOException =>
-            error(s"Error while trying to delete partition metadata file $partMetadataFile", e)
+            error(s"Error while trying to delete partition metadata file ${partMetadataFile}", e)
         }
       }
     } else if (keepPartitionMetadataFile) {
@@ -552,23 +552,15 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     )
   }
 
-
-  private var metricNames: Map[String, Map[String, String]] = Map.empty
-
-  newMetrics()
-  private[log] def newMetrics(): Unit = {
-    val tags = Map("topic" -> topicPartition.topic, "partition" -> topicPartition.partition.toString) ++
-      (if (isFuture) Map("is-future" -> "true") else Map.empty)
-    newGauge(LogMetricNames.NumLogSegments, () => numberOfSegments, tags)
-    newGauge(LogMetricNames.LogStartOffset, () => logStartOffset, tags)
-    newGauge(LogMetricNames.LogEndOffset, () => logEndOffset, tags)
-    newGauge(LogMetricNames.Size, () => size, tags)
-    metricNames = Map(LogMetricNames.NumLogSegments -> tags,
-      LogMetricNames.LogStartOffset -> tags,
-      LogMetricNames.LogEndOffset -> tags,
-      LogMetricNames.Size -> tags)
-
+  private val tags = {
+    val maybeFutureTag = if (isFuture) Map("is-future" -> "true") else Map.empty[String, String]
+    Map("topic" -> topicPartition.topic, "partition" -> topicPartition.partition.toString) ++ maybeFutureTag
   }
+
+  newGauge(LogMetricNames.NumLogSegments, () => numberOfSegments, tags)
+  newGauge(LogMetricNames.LogStartOffset, () => logStartOffset, tags)
+  newGauge(LogMetricNames.LogEndOffset, () => logEndOffset, tags)
+  newGauge(LogMetricNames.Size, () => size, tags)
 
   val producerExpireCheck = scheduler.schedule(name = "PeriodicProducerExpirationCheck", fun = () => {
     lock synchronized {
@@ -686,7 +678,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   private[log] def lastRecordsOfActiveProducers: Map[Long, LastRecord] = lock synchronized {
     producerStateManager.activeProducers.map { case (producerId, producerIdEntry) =>
       val lastDataOffset = if (producerIdEntry.lastDataOffset >= 0 ) Some(producerIdEntry.lastDataOffset) else None
-      val lastRecord = LastRecord(lastDataOffset, producerIdEntry.producerEpoch)
+      val lastRecord = new LastRecord(lastDataOffset, producerIdEntry.producerEpoch)
       producerId -> lastRecord
     }
   }
@@ -1328,7 +1320,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         // We need to search the first segment whose largest timestamp is >= the target timestamp if there is one.
         val remoteOffset = if (remoteLogEnabled()) {
           if (remoteLogManager.isEmpty) {
-            throw new KafkaException("RemoteLogManager is empty even though the remote log storage is enabled.")
+            throw new KafkaException("RemoteLogManager is empty even though the remote log storage is enabled.");
           }
           if (recordVersion.value < RecordVersion.V2.value) {
             throw new KafkaException("Tiered storage is supported only with versions supporting leader epochs, that means RecordVersion must be >= 2.")
@@ -1803,10 +1795,10 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * remove deleted log metrics
    */
   private[log] def removeLogMetrics(): Unit = {
-    metricNames.foreach {
-      case (name, tags) => removeMetric(name, tags)
-    }
-    metricNames = Map.empty
+    removeMetric(LogMetricNames.NumLogSegments, tags)
+    removeMetric(LogMetricNames.LogStartOffset, tags)
+    removeMetric(LogMetricNames.LogEndOffset, tags)
+    removeMetric(LogMetricNames.Size, tags)
   }
 
   /**

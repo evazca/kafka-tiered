@@ -17,26 +17,26 @@
 
 package kafka.log
 
-import java.io.{File, IOException}
-import java.nio._
-import java.util.Date
-import java.util.concurrent.TimeUnit
 import kafka.common._
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.{BrokerReconfigurable, KafkaConfig}
 import kafka.utils._
-import org.apache.kafka.common.{KafkaException, TopicPartition}
 import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.common.errors.{CorruptRecordException, KafkaStorageException}
 import org.apache.kafka.common.record.MemoryRecords.RecordFilter
 import org.apache.kafka.common.record.MemoryRecords.RecordFilter.BatchRetention
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{BufferSupplier, Time}
-import org.apache.kafka.server.log.internals.{AbortedTxn, LogDirFailureChannel, OffsetMap, SkimpyOffsetMap, TransactionIndex}
+import org.apache.kafka.common.{KafkaException, TopicPartition}
+import org.apache.kafka.server.log.internals.{AbortedTxn, LastRecord, LogDirFailureChannel, OffsetMap, SkimpyOffsetMap, TransactionIndex}
 
-import scala.jdk.CollectionConverters._
+import java.io.{File, IOException}
+import java.nio._
+import java.util.Date
+import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ListBuffer
 import scala.collection.{Iterable, Seq, Set, mutable}
+import scala.jdk.CollectionConverters._
 import scala.util.control.ControlThrowable
 
 /**
@@ -681,9 +681,10 @@ private[log] class Cleaner(val id: Int,
           // 3) The last entry in the log is a transaction marker. We retain this marker since it has the
           //    last producer epoch, which is needed to ensure fencing.
           lastRecordsOfActiveProducers.get(batch.producerId).exists { lastRecord =>
-            lastRecord.lastDataOffset match {
-              case Some(offset) => batch.lastOffset == offset
-              case None => batch.isControlBatch && batch.producerEpoch == lastRecord.producerEpoch
+            if(lastRecord.lastDataOffset.isPresent) {
+              batch.lastOffset == lastRecord.lastDataOffset.getAsLong
+            } else {
+              batch.isControlBatch && batch.producerEpoch == lastRecord.producerEpoch
             }
           }
         }
