@@ -18,17 +18,12 @@
 package kafka.log
 
 import com.yammer.metrics.core.MetricName
-
-import java.io.{File, IOException}
-import java.nio.file.Files
-import java.util.Optional
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import kafka.common.{OffsetsOutOfOrderException, UnexpectedAppendOffsetException}
 import kafka.log.remote.RemoteLogManager
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.checkpoints.LeaderEpochCheckpointFile
 import kafka.server.epoch.LeaderEpochFileCache
-import kafka.server.{BrokerTopicMetrics, BrokerTopicStats, FetchDataInfo, FetchHighWatermark, FetchIsolation, FetchLogEnd, FetchTxnCommitted, LogDirFailureChannel, OffsetAndEpoch, PartitionMetadataFile, RequestLocal}
+import kafka.server._
 import kafka.utils._
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.Topic
@@ -42,10 +37,14 @@ import org.apache.kafka.common.utils.{PrimitiveRef, Time, Utils}
 import org.apache.kafka.common.{InvalidRecordException, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.IBP_0_10_0_IV0
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LogOffsetMetadata, LogValidator}
+import org.apache.kafka.server.log.internals._
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.record.BrokerCompressionType
 
+import java.io.{File, IOException}
+import java.nio.file.Files
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import java.util.{Optional, OptionalLong}
 import scala.annotation.nowarn
 import scala.collection.mutable.ListBuffer
 import scala.collection.{Seq, immutable, mutable}
@@ -678,7 +677,9 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   private[log] def lastRecordsOfActiveProducers: Map[Long, LastRecord] = lock synchronized {
     producerStateManager.activeProducers.map { case (producerId, producerIdEntry) =>
       val lastDataOffset = if (producerIdEntry.lastDataOffset >= 0 ) Some(producerIdEntry.lastDataOffset) else None
-      val lastRecord = LastRecord(lastDataOffset, producerIdEntry.producerEpoch)
+      val lastRecord = new LastRecord(
+        if(lastDataOffset.isEmpty) OptionalLong.empty() else OptionalLong.of(lastDataOffset.get),
+        producerIdEntry.producerEpoch)
       producerId -> lastRecord
     }
   }
