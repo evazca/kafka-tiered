@@ -17,7 +17,6 @@
 package kafka.log
 
 import java.io.File
-
 import kafka.server.checkpoints.LeaderEpochCheckpoint
 import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
 import kafka.utils.TestUtils
@@ -25,6 +24,7 @@ import kafka.utils.TestUtils.checkEquals
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{MockTime, Time, Utils}
+import org.apache.kafka.server.log.internals.ProducerStateManager
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 

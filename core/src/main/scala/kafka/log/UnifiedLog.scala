@@ -21,7 +21,7 @@ import com.yammer.metrics.core.MetricName
 
 import java.io.{File, IOException}
 import java.nio.file.Files
-import java.util.Optional
+import java.util.{Optional, OptionalLong}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import kafka.common.{OffsetsOutOfOrderException, UnexpectedAppendOffsetException}
 import kafka.log.remote.RemoteLogManager
@@ -42,7 +42,7 @@ import org.apache.kafka.common.utils.{PrimitiveRef, Time, Utils}
 import org.apache.kafka.common.{InvalidRecordException, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.IBP_0_10_0_IV0
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LogValidator}
+import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, BatchMetadata, CompletedTxn, LastRecord, LogValidator, ProducerAppendInfo, ProducerStateManager, ProducerStateManagerConfig}
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.record.BrokerCompressionType
 
@@ -272,7 +272,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * equals the log end offset (which may never happen for a partition under consistent load). This is needed to
    * prevent the log start offset (which is exposed in fetch responses) from getting ahead of the high watermark.
    */
-  @volatile private var highWatermarkMetadata: LogOffsetMetadata = LogOffsetMetadata(logStartOffset)
+  @volatile private var highWatermarkMetadata: LogOffsetMetadata = new LogOffsetMetadata(logStartOffset)
 
   @volatile var partitionMetadataFile: Option[PartitionMetadataFile] = None
 
@@ -379,7 +379,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * @return the updated high watermark offset
    */
   def updateHighWatermark(hw: Long): Long = {
-    updateHighWatermark(LogOffsetMetadata(hw))
+    updateHighWatermark(new LogOffsetMetadata(hw))
   }
 
   /**
@@ -392,7 +392,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   def updateHighWatermark(highWatermarkMetadata: LogOffsetMetadata): Long = {
     val endOffsetMetadata = localLog.logEndOffsetMetadata
     val newHighWatermarkMetadata = if (highWatermarkMetadata.messageOffset < logStartOffset) {
-      LogOffsetMetadata(logStartOffset)
+      new LogOffsetMetadata(logStartOffset)
     } else if (highWatermarkMetadata.messageOffset >= endOffsetMetadata.messageOffset) {
       endOffsetMetadata
     } else {
@@ -656,29 +656,30 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   def activeProducers: Seq[DescribeProducersResponseData.ProducerState] = {
     lock synchronized {
-      producerStateManager.activeProducers.map { case (producerId, state) =>
+      producerStateManager.activeProducers.asScala.map { case (producerId, state) =>
         new DescribeProducersResponseData.ProducerState()
           .setProducerId(producerId)
-          .setProducerEpoch(state.producerEpoch)
+          .setProducerEpoch(state.producerEpoch())
           .setLastSequence(state.lastSeq)
-          .setLastTimestamp(state.lastTimestamp)
-          .setCoordinatorEpoch(state.coordinatorEpoch)
-          .setCurrentTxnStartOffset(state.currentTxnFirstOffset.getOrElse(-1L))
+          .setLastTimestamp(state.lastTimestamp())
+          .setCoordinatorEpoch(state.coordinatorEpoch())
+          .setCurrentTxnStartOffset(state.currentTxnFirstOffset.orElse(-1L))
       }
     }.toSeq
   }
 
   private[log] def activeProducersWithLastSequence: Map[Long, Int] = lock synchronized {
-    producerStateManager.activeProducers.map { case (producerId, producerIdEntry) =>
-      (producerId, producerIdEntry.lastSeq)
+    producerStateManager.activeProducers.asScala.toMap.map { case (producerId, producerIdEntry) =>
+      (producerId, producerIdEntry.lastSeq())
     }
   }
 
   private[log] def lastRecordsOfActiveProducers: Map[Long, LastRecord] = lock synchronized {
-    producerStateManager.activeProducers.map { case (producerId, producerIdEntry) =>
+    producerStateManager.activeProducers.asScala.toMap.map { case (producerId, producerIdEntry) =>
       val lastDataOffset = if (producerIdEntry.lastDataOffset >= 0 ) Some(producerIdEntry.lastDataOffset) else None
-      val lastRecord = LastRecord(lastDataOffset, producerIdEntry.producerEpoch)
-      producerId -> lastRecord
+      val offset = if(lastDataOffset.isEmpty) OptionalLong.empty() else OptionalLong.of(lastDataOffset.get)
+      val lastRecord = new LastRecord(offset, producerIdEntry.producerEpoch)
+      producerId.toLong -> lastRecord
     }
   }
 
@@ -1009,12 +1010,12 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   private def maybeIncrementFirstUnstableOffset(): Unit = lock synchronized {
     localLog.checkIfMemoryMappedBufferClosed()
 
-    val updatedFirstUnstableOffset = producerStateManager.firstUnstableOffset match {
-      case Some(logOffsetMetadata) if logOffsetMetadata.messageOffsetOnly || logOffsetMetadata.messageOffset < logStartOffset =>
+    val updatedFirstUnstableOffset = producerStateManager.firstUnstableOffset.map(logOffsetMetadata => {
+      if (logOffsetMetadata.messageOffsetOnly || logOffsetMetadata.messageOffset < logStartOffset) {
         val offset = math.max(logOffsetMetadata.messageOffset, logStartOffset)
-        Some(convertToOffsetMetadataOrThrow(offset))
-      case other => other
-    }
+        convertToOffsetMetadataOrThrow(offset)
+      } else logOffsetMetadata
+    })
 
     if (updatedFirstUnstableOffset != this.firstUnstableOffsetMetadata) {
       debug(s"First unstable offset updated to $updatedFirstUnstableOffset")
@@ -1074,7 +1075,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         if (origin == AppendOrigin.CLIENT) {
           val maybeLastEntry = producerStateManager.lastEntry(batch.producerId)
 
-          maybeLastEntry.flatMap(_.findDuplicateBatch(batch)).foreach { duplicate =>
+          maybeLastEntry.flatMap(_.findDuplicateBatch(batch)).map{ duplicate =>
             return (updatedProducers, completedTxns.toList, Some(duplicate))
           }
         }
@@ -1654,12 +1655,14 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   // visible for testing
   private[log] def latestProducerSnapshotOffset: Option[Long] = lock synchronized {
-    producerStateManager.latestSnapshotOffset
+    val offset = producerStateManager.latestSnapshotOffset
+    if(offset.isEmpty) None else Some(offset.getAsLong)
   }
 
   // visible for testing
   private[log] def oldestProducerSnapshotOffset: Option[Long] = lock synchronized {
-    producerStateManager.oldestSnapshotOffset
+    val offsetOptional = producerStateManager.oldestSnapshotOffset
+    if(offsetOptional.isEmpty) Option.empty else Some(offsetOptional.getAsLong)
   }
 
   // visible for testing
@@ -2166,7 +2169,8 @@ object UnifiedLog extends Logging {
                                            parentDir: String,
                                            topicPartition: TopicPartition): Unit = {
     val snapshotsToDelete = segments.flatMap { segment =>
-      producerStateManager.removeAndMarkSnapshotForDeletion(segment.baseOffset)
+      val snapshot = producerStateManager.removeAndMarkSnapshotForDeletion(segment.baseOffset)
+      if (snapshot.isPresent) Some(snapshot.get()) else None
     }
 
     def deleteProducerSnapshots(): Unit = {

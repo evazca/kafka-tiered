@@ -27,16 +27,16 @@ import java.util.Objects;
  * 3. the physical position on the located segment
  */
 public class LogOffsetMetadata {
-    public static final LogOffsetMetadata UnknownOffsetMetadata = new LogOffsetMetadata(-1, 0, 0);
-    public static final int UnknownFilePosition = -1;
-    public static final long UnknownOffset = -1L;
+    public static final LogOffsetMetadata UNKNOWN_OFFSET_METADATA = new LogOffsetMetadata(-1, 0, 0);
+    public static final int UNKNOWN_FILE_POSITION = -1;
+    public static final long UNKNOWN_OFFSET = -1L;
 
     public final long messageOffset;
     public final long segmentBaseOffset;
     public final int relativePositionInSegment;
 
     public LogOffsetMetadata(long messageOffset) {
-        this(messageOffset, UnknownOffset, UnknownFilePosition);
+        this(messageOffset, UNKNOWN_OFFSET, UNKNOWN_FILE_POSITION);
     }
 
     public LogOffsetMetadata(long messageOffset,
@@ -94,7 +94,7 @@ public class LogOffsetMetadata {
      * Returns true if the offset metadata only contains message offset info
      */
     public boolean messageOffsetOnly() {
-        return segmentBaseOffset == UnknownOffset && relativePositionInSegment == LogOffsetMetadata.UnknownFilePosition;
+        return segmentBaseOffset == UNKNOWN_OFFSET && relativePositionInSegment == LogOffsetMetadata.UNKNOWN_FILE_POSITION;
     }
 
     @Override

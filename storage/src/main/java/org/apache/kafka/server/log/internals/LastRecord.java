@@ -17,17 +17,17 @@
 package org.apache.kafka.server.log.internals;
 
 import java.util.Objects;
-import java.util.Optional;
+import java.util.OptionalLong;
 
 /**
  * The last written record for a given producer. The last data offset may be undefined
  * if the only log entry for a producer is a transaction marker.
  */
 public final class LastRecord {
-    public final Optional<Long> lastDataOffset;
+    public final OptionalLong lastDataOffset;
     public final short producerEpoch;
 
-    public LastRecord(Optional<Long> lastDataOffset, short producerEpoch) {
+    public LastRecord(OptionalLong lastDataOffset, short producerEpoch) {
         this.lastDataOffset = lastDataOffset;
         this.producerEpoch = producerEpoch;
     }
