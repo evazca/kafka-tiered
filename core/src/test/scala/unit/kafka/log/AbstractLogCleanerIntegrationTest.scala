@@ -27,7 +27,7 @@ import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, RecordBatch}
 import org.apache.kafka.common.utils.Utils
 import org.apache.kafka.server.log.internals.{LogDirFailureChannel, ProducerStateManagerConfig}
-import org.apache.kafka.server.log.internals.{CleanerConfig, LogConfig, LogDirFailureChannel}
+import org.apache.kafka.server.log.internals.{CleanerConfig, LogConfig}
 import org.junit.jupiter.api.{AfterEach, Tag}
 
 import scala.collection.Seq

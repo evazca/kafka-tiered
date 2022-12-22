@@ -27,11 +27,12 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InvalidOffsetException
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.apache.kafka.snapshot.Snapshots
-import org.apache.kafka.server.log.internals.{CorruptIndexException, LoadedLogOffsets, LogConfig, LogDirFailureChannel, LogOffsetMetadata}
+import org.apache.kafka.server.log.internals.{CorruptIndexException, LoadedLogOffsets, LogConfig, LogDirFailureChannel, LogOffsetMetadata, ProducerStateManager}
 import org.apache.kafka.server.util.Scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import scala.collection.{Set, mutable}
+import scala.jdk.CollectionConverters._
 
 object LogLoader extends Logging {
 
@@ -191,7 +192,7 @@ class LogLoader(
     // Reload all snapshots into the ProducerStateManager cache, the intermediate ProducerStateManager used
     // during log recovery may have deleted some files without the LogLoader.producerStateManager instance witnessing the
     // deletion.
-    producerStateManager.removeStraySnapshots(segments.baseOffsets.toSeq)
+    producerStateManager.removeStraySnapshots(segments.baseOffsets.toSeq.map(x => Long.box(x)).asJava)
     UnifiedLog.rebuildProducerState(
       producerStateManager,
       segments,
