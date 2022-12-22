@@ -17,24 +17,23 @@
 package kafka.log
 
 import com.yammer.metrics.core.Timer
-
-import java.io.{File, IOException}
-import java.nio.file.{Files, NoSuchFileException}
-import java.nio.file.attribute.FileTime
-import java.util.concurrent.TimeUnit
 import kafka.common.LogSegmentOffsetOverflowException
 import kafka.metrics.KafkaMetricsGroup
+import kafka.server.FetchDataInfo
 import kafka.server.epoch.LeaderEpochFileCache
-import kafka.server.{FetchDataInfo, LogOffsetMetadata}
 import kafka.utils._
 import org.apache.kafka.common.InvalidRecordException
 import org.apache.kafka.common.errors.CorruptRecordException
 import org.apache.kafka.common.record.FileRecords.{LogOffsetPosition, TimestampAndOffset}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{BufferSupplier, Time}
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, OffsetIndex, OffsetPosition, ProducerStateManager, TimeIndex, TimestampOffset, TransactionIndex, TxnIndexSearchResult}
+import org.apache.kafka.server.log.internals._
 
+import java.io.{File, IOException}
+import java.nio.file.attribute.FileTime
+import java.nio.file.{Files, NoSuchFileException}
 import java.util.Optional
+import java.util.concurrent.TimeUnit
 import scala.jdk.CollectionConverters._
 import scala.math._
 
@@ -248,14 +247,14 @@ class LogSegment private[log] (val log: FileRecords,
   private def updateProducerState(producerStateManager: ProducerStateManager, batch: RecordBatch): Unit = {
     if (batch.hasProducerId) {
       val producerId = batch.producerId
-      val appendInfo = producerStateManager.prepareUpdate(producerId, origin = AppendOrigin.REPLICATION)
-      val maybeCompletedTxn = appendInfo.append(batch, firstOffsetMetadataOpt = None)
+      val appendInfo = producerStateManager.prepareUpdate(producerId, AppendOrigin.REPLICATION)
+      val maybeCompletedTxn = appendInfo.append(batch, Optional.empty())
       producerStateManager.update(appendInfo)
-      maybeCompletedTxn.foreach { completedTxn =>
+      maybeCompletedTxn.ifPresent((completedTxn: CompletedTxn) => {
         val lastStableOffset = producerStateManager.lastStableOffset(completedTxn)
         updateTxnIndex(completedTxn, lastStableOffset)
         producerStateManager.completeTxn(completedTxn)
-      }
+      })
     }
     producerStateManager.updateMapEndOffset(batch.lastOffset + 1)
   }
@@ -305,7 +304,7 @@ class LogSegment private[log] (val log: FileRecords,
       return null
 
     val startPosition = startOffsetAndSize.position
-    val offsetMetadata = LogOffsetMetadata(startOffset, this.baseOffset, startPosition)
+    val offsetMetadata = new LogOffsetMetadata(startOffset, this.baseOffset, startPosition)
 
     val adjustedMaxSize =
       if (minOneMessage) math.max(maxSize, startOffsetAndSize.size)

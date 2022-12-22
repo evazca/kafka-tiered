@@ -25,6 +25,7 @@ import kafka.utils.Implicits._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, RecordBatch}
 import org.apache.kafka.common.utils.Utils
+import org.apache.kafka.server.log.internals.ProducerStateManagerConfig
 import org.junit.jupiter.api.{AfterEach, Tag}
 
 import scala.collection.Seq

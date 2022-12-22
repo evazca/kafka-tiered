@@ -18,9 +18,9 @@
 package kafka.cluster
 
 import kafka.log.UnifiedLog
-import kafka.server.LogOffsetMetadata
 import kafka.utils.Logging
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.server.log.internals.LogOffsetMetadata
 
 import java.util.concurrent.atomic.AtomicReference
 

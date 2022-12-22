@@ -21,16 +21,17 @@ import java.io.{File, IOException}
 import java.nio.file.{Files, NoSuchFileException}
 import kafka.common.LogSegmentOffsetOverflowException
 import kafka.log.UnifiedLog.{CleanedFileSuffix, DeletedFileSuffix, SwapFileSuffix, isIndexFile, isLogFile, offsetFromFile}
-import kafka.server.{LogDirFailureChannel, LogOffsetMetadata}
+import kafka.server.LogDirFailureChannel
 import kafka.server.epoch.LeaderEpochFileCache
 import kafka.utils.{CoreUtils, Logging, Scheduler}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InvalidOffsetException
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.snapshot.Snapshots
-import org.apache.kafka.server.log.internals.{CorruptIndexException, ProducerStateManager}
+import org.apache.kafka.server.log.internals.{CorruptIndexException, LogOffsetMetadata, ProducerStateManager}
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.collection.{Set, mutable}
 
 case class LoadedLogOffsets(logStartOffset: Long,
@@ -195,7 +196,7 @@ class LogLoader(
     // Reload all snapshots into the ProducerStateManager cache, the intermediate ProducerStateManager used
     // during log recovery may have deleted some files without the LogLoader.producerStateManager instance witnessing the
     // deletion.
-    producerStateManager.removeStraySnapshots(segments.baseOffsets.toSeq)
+    producerStateManager.removeStraySnapshots(segments.baseOffsets.toSeq.map(java.lang.Long.valueOf).asJava)
     UnifiedLog.rebuildProducerState(
       producerStateManager,
       segments,
@@ -209,7 +210,7 @@ class LogLoader(
     LoadedLogOffsets(
       newLogStartOffset,
       newRecoveryPoint,
-      LogOffsetMetadata(nextOffset, activeSegment.baseOffset, activeSegment.size))
+      new LogOffsetMetadata(nextOffset, activeSegment.baseOffset, activeSegment.size))
   }
 
   /**

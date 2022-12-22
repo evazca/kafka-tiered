@@ -17,12 +17,6 @@
 
 package kafka.log
 
-import java.io.{File, RandomAccessFile}
-import java.nio._
-import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
-import java.util.Properties
-import java.util.concurrent.{CountDownLatch, TimeUnit}
 import kafka.common._
 import kafka.server.{BrokerTopicStats, KafkaConfig, LogDirFailureChannel}
 import kafka.utils._
@@ -30,10 +24,16 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.CorruptRecordException
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.Utils
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, ProducerStateManager}
+import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, ProducerStateManager, ProducerStateManagerConfig}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, Test}
 
+import java.io.{File, RandomAccessFile}
+import java.nio._
+import java.nio.charset.StandardCharsets
+import java.nio.file.Paths
+import java.util.Properties
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.collection._
 import scala.jdk.CollectionConverters._
 

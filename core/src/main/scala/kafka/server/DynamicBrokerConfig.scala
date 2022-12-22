@@ -17,25 +17,26 @@
 
 package kafka.server
 
-import java.util
-import java.util.{Collections, Properties}
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.locks.ReentrantReadWriteLock
 import kafka.cluster.EndPoint
-import kafka.log.{LogCleaner, LogConfig, LogManager, ProducerStateManagerConfig}
+import kafka.log.{LogCleaner, LogConfig, LogManager}
 import kafka.network.{DataPlaneAcceptor, SocketServer}
 import kafka.server.DynamicBrokerConfig._
-import kafka.utils.{CoreUtils, Logging, PasswordEncoder}
 import kafka.utils.Implicits._
+import kafka.utils.{CoreUtils, Logging, PasswordEncoder}
 import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.common.Reconfigurable
+import org.apache.kafka.common.config.types.Password
 import org.apache.kafka.common.config.{AbstractConfig, ConfigDef, ConfigException, SslConfigs}
 import org.apache.kafka.common.metrics.{JmxReporter, Metrics, MetricsReporter}
-import org.apache.kafka.common.config.types.Password
 import org.apache.kafka.common.network.{ListenerName, ListenerReconfigurable}
 import org.apache.kafka.common.security.authenticator.LoginManager
 import org.apache.kafka.common.utils.{ConfigUtils, Utils}
+import org.apache.kafka.server.log.internals.ProducerStateManagerConfig
 
+import java.util
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.{Collections, Properties}
 import scala.annotation.nowarn
 import scala.collection._
 import scala.jdk.CollectionConverters._
@@ -85,7 +86,7 @@ object DynamicBrokerConfig {
     Set(KafkaConfig.MetricReporterClassesProp) ++
     DynamicListenerConfig.ReconfigurableConfigs ++
     SocketServer.ReconfigurableConfigs ++
-    ProducerStateManagerConfig.ReconfigurableConfigs
+    ProducerStateManagerConfig.reconfigurableConfigs().asScala
 
   private val ClusterLevelListenerConfigs = Set(KafkaConfig.MaxConnectionsProp, KafkaConfig.MaxConnectionCreationRateProp, KafkaConfig.NumNetworkThreadsProp)
   private val PerBrokerConfigs = (DynamicSecurityConfigs ++ DynamicListenerConfig.ReconfigurableConfigs).diff(
@@ -266,7 +267,8 @@ class DynamicBrokerConfig(private val kafkaConfig: KafkaConfig) extends Logging 
     addBrokerReconfigurable(new DynamicLogConfig(kafkaServer.logManager, kafkaServer))
     addBrokerReconfigurable(new DynamicListenerConfig(kafkaServer))
     addBrokerReconfigurable(kafkaServer.socketServer)
-    addBrokerReconfigurable(kafkaServer.logManager.producerStateManagerConfig)
+    // todo-satish Change this once configure changes are in
+//    addBrokerReconfigurable(kafkaServer.logManager.producerStateManagerConfig)
   }
 
   def addReconfigurable(reconfigurable: Reconfigurable): Unit = CoreUtils.inWriteLock(lock) {

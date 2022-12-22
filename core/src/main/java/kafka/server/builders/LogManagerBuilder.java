@@ -20,13 +20,13 @@ package kafka.server.builders;
 import kafka.log.CleanerConfig;
 import kafka.log.LogConfig;
 import kafka.log.LogManager;
-import kafka.log.ProducerStateManagerConfig;
 import kafka.server.BrokerTopicStats;
 import kafka.server.LogDirFailureChannel;
 import kafka.server.metadata.ConfigRepository;
 import kafka.utils.Scheduler;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.server.common.MetadataVersion;
+import org.apache.kafka.server.log.internals.ProducerStateManagerConfig;
 import scala.collection.JavaConverters;
 
 import java.io.File;

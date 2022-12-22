@@ -18,17 +18,12 @@
 package kafka.log
 
 import com.yammer.metrics.core.MetricName
-
-import java.io.{File, IOException}
-import java.nio.file.Files
-import java.util.{Optional, OptionalLong}
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import kafka.common.{OffsetsOutOfOrderException, UnexpectedAppendOffsetException}
 import kafka.log.remote.RemoteLogManager
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.checkpoints.LeaderEpochCheckpointFile
 import kafka.server.epoch.LeaderEpochFileCache
-import kafka.server.{BrokerTopicMetrics, BrokerTopicStats, FetchDataInfo, FetchHighWatermark, FetchIsolation, FetchLogEnd, FetchTxnCommitted, LogDirFailureChannel, LogOffsetMetadata, OffsetAndEpoch, PartitionMetadataFile, RequestLocal}
+import kafka.server._
 import kafka.utils._
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.Topic
@@ -42,13 +37,18 @@ import org.apache.kafka.common.utils.{PrimitiveRef, Time, Utils}
 import org.apache.kafka.common.{InvalidRecordException, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.IBP_0_10_0_IV0
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, BatchMetadata, CompletedTxn, LastRecord, LogValidator, ProducerAppendInfo, ProducerStateManager, ProducerStateManagerConfig}
+import org.apache.kafka.server.log.internals._
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.record.BrokerCompressionType
 
+import java.io.{File, IOException}
+import java.nio.file.Files
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import java.util.{Optional, OptionalLong}
 import scala.annotation.nowarn
 import scala.collection.mutable.ListBuffer
 import scala.collection.{Seq, immutable, mutable}
+import scala.compat.java8.OptionConverters.{RichOptionForJava8, RichOptionalGeneric}
 import scala.jdk.CollectionConverters._
 
 object LogAppendInfo {
@@ -444,7 +444,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   def maybeUpdateHighWatermark(hw: Long): Option[Long] = {
     lock.synchronized {
       val oldHighWatermark = highWatermarkMetadata
-      updateHighWatermark(LogOffsetMetadata(hw)) match {
+      updateHighWatermark(new LogOffsetMetadata(hw)) match {
         case oldHighWatermark.messageOffset =>
           None
         case newHighWatermark =>
@@ -669,9 +669,9 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   }
 
   private[log] def activeProducersWithLastSequence: Map[Long, Int] = lock synchronized {
-    producerStateManager.activeProducers.asScala.toMap.map { case (producerId, producerIdEntry) =>
+    producerStateManager.activeProducers.asScala.map { case (producerId, producerIdEntry) =>
       (producerId, producerIdEntry.lastSeq())
-    }
+    }.map{case(k, v) => (Long.unbox(k), v)}.toMap
   }
 
   private[log] def lastRecordsOfActiveProducers: Map[Long, LastRecord] = lock synchronized {
@@ -830,7 +830,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
           if (validateAndAssignOffsets) {
             // assign offsets to the message set
             val offset = PrimitiveRef.ofLong(localLog.logEndOffset)
-            appendInfo.firstOffset = Some(LogOffsetMetadata(offset.value))
+            appendInfo.firstOffset = Some(new LogOffsetMetadata(offset.value))
             val validateAndOffsetAssignResult = try {
               val validator = new LogValidator(validRecords,
                 topicPartition,
@@ -927,10 +927,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
           // maybe roll the log if this segment is full
           val segment = maybeRoll(validRecords.sizeInBytes, appendInfo)
 
-          val logOffsetMetadata = LogOffsetMetadata(
-            messageOffset = appendInfo.firstOrLastOffsetOfFirstBatch,
-            segmentBaseOffset = segment.baseOffset,
-            relativePositionInSegment = segment.size)
+          val logOffsetMetadata = new LogOffsetMetadata(appendInfo.firstOrLastOffsetOfFirstBatch, segment.baseOffset, segment.size)
 
           // now that we have valid records, offsets assigned, and timestamps updated, we need to
           // validate the idempotent/transactional state of the producers and collect some metadata
@@ -939,14 +936,14 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
           maybeDuplicate match {
             case Some(duplicate) =>
-              appendInfo.firstOffset = Some(LogOffsetMetadata(duplicate.firstOffset))
+              appendInfo.firstOffset = Some(new LogOffsetMetadata(duplicate.firstOffset))
               appendInfo.lastOffset = duplicate.lastOffset
               appendInfo.logAppendTime = duplicate.timestamp
               appendInfo.logStartOffset = logStartOffset
             case None =>
               // Before appending update the first offset metadata to include segment information
               appendInfo.firstOffset = appendInfo.firstOffset.map { offsetMetadata =>
-                offsetMetadata.copy(segmentBaseOffset = segment.baseOffset, relativePositionInSegment = segment.size)
+                new LogOffsetMetadata(offsetMetadata.messageOffset, segment.baseOffset, segment.size)
               }
 
               // Append the records, and increment the local log end offset immediately after the append because a
@@ -1010,7 +1007,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   private def maybeIncrementFirstUnstableOffset(): Unit = lock synchronized {
     localLog.checkIfMemoryMappedBufferClosed()
 
-    val updatedFirstUnstableOffset = producerStateManager.firstUnstableOffset.map(logOffsetMetadata => {
+    val updatedFirstUnstableOffset = producerStateManager.firstUnstableOffset.asScala.map(logOffsetMetadata => {
       if (logOffsetMetadata.messageOffsetOnly || logOffsetMetadata.messageOffset < logStartOffset) {
         val offset = math.max(logOffsetMetadata.messageOffset, logStartOffset)
         convertToOffsetMetadataOrThrow(offset)
@@ -1083,7 +1080,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         // We cache offset metadata for the start of each transaction. This allows us to
         // compute the last stable offset without relying on additional index lookups.
         val firstOffsetMetadata = if (batch.isTransactional)
-          Some(LogOffsetMetadata(batch.baseOffset, appendOffsetMetadata.segmentBaseOffset, relativePositionInSegment))
+          Some(new LogOffsetMetadata(batch.baseOffset, appendOffsetMetadata.segmentBaseOffset, relativePositionInSegment))
         else
           None
 
@@ -1147,7 +1144,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
       // Also indicate whether we have the accurate first offset or not
       if (!readFirstMessage) {
         if (batch.magic >= RecordBatch.MAGIC_VALUE_V2)
-          firstOffset = Some(LogOffsetMetadata(batch.baseOffset))
+          firstOffset = Some(new LogOffsetMetadata(batch.baseOffset))
         lastOffsetOfFirstBatch = batch.lastOffset
         readFirstMessage = true
       }
@@ -1656,13 +1653,13 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   // visible for testing
   private[log] def latestProducerSnapshotOffset: Option[Long] = lock synchronized {
     val offset = producerStateManager.latestSnapshotOffset
-    if(offset.isEmpty) None else Some(offset.getAsLong)
+    if(offset.isPresent) Some(offset.getAsLong) else None
   }
 
   // visible for testing
   private[log] def oldestProducerSnapshotOffset: Option[Long] = lock synchronized {
     val offsetOptional = producerStateManager.oldestSnapshotOffset
-    if(offsetOptional.isEmpty) Option.empty else Some(offsetOptional.getAsLong)
+    if(offsetOptional.isPresent) Some(offsetOptional.getAsLong) else None
   }
 
   // visible for testing
@@ -1974,7 +1971,7 @@ object UnifiedLog extends Logging {
                               origin: AppendOrigin): Option[CompletedTxn] = {
     val producerId = batch.producerId
     val appendInfo = producers.getOrElseUpdate(producerId, producerStateManager.prepareUpdate(producerId, origin))
-    appendInfo.append(batch, firstOffsetMetadata)
+    appendInfo.append(batch, firstOffsetMetadata.asJava).asScala
   }
 
   /**
@@ -2096,7 +2093,7 @@ object UnifiedLog extends Logging {
     // (or later snapshots). Otherwise, if there is no snapshot file, then we have to rebuild producer state
     // from the first segment.
     if (recordVersion.value < RecordBatch.MAGIC_VALUE_V2 ||
-      (producerStateManager.latestSnapshotOffset.isEmpty && reloadFromCleanShutdown)) {
+      (!producerStateManager.latestSnapshotOffset.isPresent && reloadFromCleanShutdown)) {
       // To avoid an expensive scan through all of the segments, we take empty snapshots from the start of the
       // last two segments and the last offset. This should avoid the full scan in the case that the log needs
       // truncation.

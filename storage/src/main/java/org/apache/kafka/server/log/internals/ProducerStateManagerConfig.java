@@ -22,11 +22,11 @@ public class ProducerStateManagerConfig {
 
     private volatile int producerIdExpirationMs;
 
-    ProducerStateManagerConfig(int producerIdExpirationMs) {
+    public ProducerStateManagerConfig(int producerIdExpirationMs) {
         this.producerIdExpirationMs = producerIdExpirationMs;
     }
 
-    public Set<String> reconfigurableConfigs()  {
+    public static Set<String> reconfigurableConfigs()  {
         //Set(KafkaConfig.ProducerIdExpirationMsProp)
         return null;
     }

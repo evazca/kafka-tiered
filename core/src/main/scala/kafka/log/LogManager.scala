@@ -24,7 +24,6 @@ import java.io._
 import java.nio.file.Files
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
-
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.server.metadata.ConfigRepository
@@ -39,9 +38,10 @@ import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import kafka.utils.Implicits._
-import java.util.Properties
 
+import java.util.Properties
 import org.apache.kafka.server.common.MetadataVersion
+import org.apache.kafka.server.log.internals.ProducerStateManagerConfig
 
 import scala.annotation.nowarn
 

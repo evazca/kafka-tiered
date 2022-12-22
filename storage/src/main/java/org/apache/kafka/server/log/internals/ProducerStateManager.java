@@ -78,7 +78,7 @@ public class ProducerStateManager {
     public static final String DELETED_FILE_SUFFIX = ".deleted";
     public static final String PRODUCER_SNAPSHOT_FILE_SUFFIX = ".snapshot";
 
-    private static final long LATE_TRANSACTION_BUFFER_MS = 5 * 60 * 1000;
+    public static final long LATE_TRANSACTION_BUFFER_MS = 5 * 60 * 1000;
 
     private static final short PRODUCER_SNAPSHOT_VERSION = 1;
     private static final String VERSION_FIELD = "version";
@@ -101,8 +101,8 @@ public class ProducerStateManager {
     private static final Schema PID_SNAPSHOT_MAP_SCHEMA = new Schema(new Field(VERSION_FIELD, Type.INT16, "Version of the snapshot file"), new Field(CRC_FIELD, Type.UNSIGNED_INT32, "CRC of the snapshot data"), new Field(PRODUCER_ENTRIES_FIELD, new ArrayOf(PRODUCER_SNAPSHOT_ENTRY_SCHEMA), "The entries in the producer table"));
     private final TopicPartition topicPartition;
     private volatile File logDir;
-    private final int maxTransactionTimeoutMs;
-    private final ProducerStateManagerConfig producerStateManagerConfig;
+    public final int maxTransactionTimeoutMs;
+    public final ProducerStateManagerConfig producerStateManagerConfig;
     private final Time time;
 
     private ConcurrentSkipListMap<Long, SnapshotFile> snapshots;
@@ -163,7 +163,7 @@ public class ProducerStateManager {
      * The goal here is to remove any snapshot files which do not have an associated segment file, but not to remove the
      * largest stray snapshot file which was emitted during clean shutdown.
      */
-    void removeStraySnapshots(List<Long> segmentBaseOffsets) throws IOException {
+    public void removeStraySnapshots(List<Long> segmentBaseOffsets) throws IOException {
         OptionalLong maxSegmentBaseOffset = (segmentBaseOffsets.isEmpty()) ? OptionalLong.empty() : OptionalLong.of(segmentBaseOffsets.stream().max(Long::compare).get());
 
         HashSet<Long> baseOffsets = new HashSet<>(segmentBaseOffsets);
@@ -644,7 +644,7 @@ public class ProducerStateManager {
     }
 
     // visible for testing
-    private static List<SnapshotFile> listSnapshotFiles(File dir) throws IOException {
+    public static List<SnapshotFile> listSnapshotFiles(File dir) throws IOException {
         if (dir.exists() && dir.isDirectory()) {
             try (Stream<Path> paths = Files.list(dir.toPath())) {
                 return paths.filter(path -> path.toFile().isFile() && isSnapshotFile(path.toFile())).map(path -> new SnapshotFile(path.toFile())).collect(Collectors.toList());
@@ -661,7 +661,7 @@ public class ProducerStateManager {
      */
     public static class ProducerStateEntry {
         public static final int NumBatchesToRetain = 5;
-        private final long producerId;
+        public final long producerId;
         private final List<BatchMetadata> batchMetadata;
         short producerEpoch;
         int coordinatorEpoch;
@@ -746,6 +746,10 @@ public class ProducerStateManager {
             return duplicate.findFirst();
         }
 
+        public List<BatchMetadata> batchMetadata() {
+            return Collections.unmodifiableList(batchMetadata);
+        }
+
         public short producerEpoch() {
             return producerEpoch;
         }
@@ -769,7 +773,7 @@ public class ProducerStateManager {
         }
 
         private volatile File file;
-        private final long offset;
+        public final long offset;
 
         public SnapshotFile(File file) {
             this(file, offsetFromFileName(file.getName()));

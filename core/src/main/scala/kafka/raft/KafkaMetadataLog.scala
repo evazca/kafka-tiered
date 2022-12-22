@@ -16,7 +16,7 @@
  */
 package kafka.raft
 
-import kafka.log.{Defaults, LogConfig, LogOffsetSnapshot, ProducerStateManagerConfig, SnapshotGenerated, UnifiedLog}
+import kafka.log.{Defaults, LogConfig, LogOffsetSnapshot, SnapshotGenerated, UnifiedLog}
 import kafka.server.KafkaConfig.{MetadataLogSegmentBytesProp, MetadataLogSegmentMinBytesProp}
 import kafka.server.{BrokerTopicStats, FetchHighWatermark, FetchLogEnd, KafkaConfig, LogDirFailureChannel, RequestLocal}
 import kafka.utils.{CoreUtils, Logging, Scheduler}
@@ -26,7 +26,8 @@ import org.apache.kafka.common.record.{ControlRecordUtils, MemoryRecords, Record
 import org.apache.kafka.common.utils.{BufferSupplier, Time}
 import org.apache.kafka.common.{KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.raft.{Isolation, KafkaRaftClient, LogAppendInfo, LogFetchInfo, LogOffsetMetadata, OffsetAndEpoch, OffsetMetadata, ReplicatedLog, ValidOffsetAndEpoch}
-import org.apache.kafka.server.log.internals.AppendOrigin
+import org.apache.kafka.server.log.internals
+import org.apache.kafka.server.log.internals.{AppendOrigin, ProducerStateManagerConfig}
 import org.apache.kafka.snapshot.{FileRawSnapshotReader, FileRawSnapshotWriter, RawSnapshotReader, RawSnapshotWriter, SnapshotPath, Snapshots}
 
 import java.io.File
@@ -190,7 +191,7 @@ final class KafkaMetadataLog private (
   override def updateHighWatermark(offsetMetadata: LogOffsetMetadata): Unit = {
     offsetMetadata.metadata.asScala match {
       case Some(segmentPosition: SegmentPosition) => log.updateHighWatermark(
-        new kafka.server.LogOffsetMetadata(
+        new internals.LogOffsetMetadata(
           offsetMetadata.offset,
           segmentPosition.baseOffset,
           segmentPosition.relativePosition)
