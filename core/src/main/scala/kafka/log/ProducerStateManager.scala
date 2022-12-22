@@ -16,10 +16,8 @@
  */
 package kafka.log
 
-import kafka.server.{BrokerReconfigurable, KafkaConfig}
 import kafka.utils.{Logging, nonthreadsafe, threadsafe}
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.common.protocol.types._
 import org.apache.kafka.common.record.RecordBatch
 import org.apache.kafka.common.utils.{ByteUtils, Crc32C, Time}
@@ -609,23 +607,6 @@ class ProducerStateManager(
 
 
 
-class ProducerStateManagerConfig(@volatile var producerIdExpirationMs: Int) extends Logging with BrokerReconfigurable {
 
-  override def reconfigurableConfigs: Set[String] = ProducerStateManagerConfig.ReconfigurableConfigs
 
-  override def reconfigure(oldConfig: KafkaConfig, newConfig: KafkaConfig): Unit = {
-    if (producerIdExpirationMs != newConfig.producerIdExpirationMs) {
-      info(s"Reconfigure ${KafkaConfig.ProducerIdExpirationMsProp} from $producerIdExpirationMs to ${newConfig.producerIdExpirationMs}")
-      producerIdExpirationMs = newConfig.producerIdExpirationMs
-    }
-  }
 
-  override def validateReconfiguration(newConfig: KafkaConfig): Unit = {
-    if (newConfig.producerIdExpirationMs < 0)
-      throw new ConfigException(s"${KafkaConfig.ProducerIdExpirationMsProp} cannot be less than 0, current value is $producerIdExpirationMs")
-  }
-}
-
-object ProducerStateManagerConfig {
-  val ReconfigurableConfigs = Set(KafkaConfig.ProducerIdExpirationMsProp)
-}
