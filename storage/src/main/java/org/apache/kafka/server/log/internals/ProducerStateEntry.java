@@ -26,11 +26,11 @@ import java.util.stream.Stream;
 
 /**
  * The batchMetadata is ordered such that the batch with the lowest sequence is at the head of the queue while the
- * batch with the highest sequence is at the tail of the queue. We will retain at most {@link ProducerStateEntry#NumBatchesToRetain}
+ * batch with the highest sequence is at the tail of the queue. We will retain at most {@link ProducerStateEntry#NUM_BATCHES_TO_RETAIN}
  * elements in the queue. When the queue is at capacity, we remove the first element to make space for the incoming batch.
  */
 public class ProducerStateEntry {
-    public static final int NumBatchesToRetain = 5;
+    public static final int NUM_BATCHES_TO_RETAIN = 5;
     public final long producerId;
     private final List<BatchMetadata> batchMetadata;
     public short producerEpoch;
@@ -93,7 +93,7 @@ public class ProducerStateEntry {
     }
 
     private void addBatchMetadata(BatchMetadata batch) {
-        if (batchMetadata.size() == ProducerStateEntry.NumBatchesToRetain) batchMetadata.remove(0);
+        if (batchMetadata.size() == ProducerStateEntry.NUM_BATCHES_TO_RETAIN) batchMetadata.remove(0);
         batchMetadata.add(batch);
     }
 

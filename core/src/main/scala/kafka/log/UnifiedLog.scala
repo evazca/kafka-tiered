@@ -48,7 +48,7 @@ import java.util.{Optional, OptionalLong}
 import scala.annotation.nowarn
 import scala.collection.mutable.ListBuffer
 import scala.collection.{Seq, immutable, mutable}
-import scala.compat.java8.OptionConverters.RichOptionalGeneric
+import scala.compat.java8.OptionConverters._
 import scala.jdk.CollectionConverters._
 
 object LogAppendInfo {
@@ -1974,7 +1974,7 @@ object UnifiedLog extends Logging {
                               origin: AppendOrigin): Option[CompletedTxn] = {
     val producerId = batch.producerId
     val appendInfo = producers.getOrElseUpdate(producerId, producerStateManager.prepareUpdate(producerId, origin))
-    appendInfo.append(batch, firstOffsetMetadata)
+    appendInfo.append(batch, firstOffsetMetadata.asJava).asScala
   }
 
   /**
