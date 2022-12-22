@@ -19,10 +19,10 @@ package kafka.utils
 import java.util.Properties
 import java.util.concurrent.atomic._
 import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
-import kafka.log.{LocalLog, LogConfig, LogLoader, LogSegments, ProducerStateManager, UnifiedLog}
+import kafka.log.{LocalLog, LogConfig, LogLoader, LogSegments, UnifiedLog}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.TestUtils.retry
-import org.apache.kafka.server.log.internals.ProducerStateManagerConfig
+import org.apache.kafka.server.log.internals.{ProducerStateManager, ProducerStateManagerConfig}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test, Timeout}
 

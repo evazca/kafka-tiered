@@ -32,7 +32,7 @@ import org.apache.kafka.common.errors.CorruptRecordException
 import org.apache.kafka.common.record.FileRecords.{LogOffsetPosition, TimestampAndOffset}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{BufferSupplier, Time}
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LazyIndex, LogOffsetMetadata, OffsetIndex, OffsetPosition, TimeIndex, TimestampOffset, TransactionIndex, TxnIndexSearchResult}
+import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LazyIndex, LogOffsetMetadata, OffsetIndex, OffsetPosition, ProducerStateManager, TimeIndex, TimestampOffset, TransactionIndex, TxnIndexSearchResult}
 
 import java.util.Optional
 import scala.compat.java8.OptionConverters._
@@ -249,7 +249,7 @@ class LogSegment private[log] (val log: FileRecords,
   private def updateProducerState(producerStateManager: ProducerStateManager, batch: RecordBatch): Unit = {
     if (batch.hasProducerId) {
       val producerId = batch.producerId
-      val appendInfo = producerStateManager.prepareUpdate(producerId, origin = AppendOrigin.REPLICATION)
+      val appendInfo = producerStateManager.prepareUpdate(producerId, AppendOrigin.REPLICATION)
       val maybeCompletedTxn = appendInfo.append(batch, Optional.empty()).asScala
       producerStateManager.update(appendInfo)
       maybeCompletedTxn.foreach { completedTxn =>

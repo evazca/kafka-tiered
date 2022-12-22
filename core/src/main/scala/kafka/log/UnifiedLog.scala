@@ -657,7 +657,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   def activeProducers: Seq[DescribeProducersResponseData.ProducerState] = {
     lock synchronized {
-      producerStateManager.activeProducers.map { case (producerId, state) =>
+      producerStateManager.activeProducers.asScala.map { case (producerId, state) =>
         new DescribeProducersResponseData.ProducerState()
           .setProducerId(producerId)
           .setProducerEpoch(state.producerEpoch)
@@ -670,20 +670,20 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   }
 
   private[log] def activeProducersWithLastSequence: Map[Long, Int] = lock synchronized {
-    producerStateManager.activeProducers.map { case (producerId, producerIdEntry) =>
-      (producerId, producerIdEntry.lastSeq)
+    producerStateManager.activeProducers.asScala.map { case (producerId, producerIdEntry) =>
+      (producerId.toLong, producerIdEntry.lastSeq)
     }
-  }
+  }.toMap
 
   private[log] def lastRecordsOfActiveProducers: Map[Long, LastRecord] = lock synchronized {
-    producerStateManager.activeProducers.map { case (producerId, producerIdEntry) =>
+    producerStateManager.activeProducers.asScala.map { case (producerId, producerIdEntry) =>
       val lastDataOffset = if (producerIdEntry.lastDataOffset >= 0 ) Some(producerIdEntry.lastDataOffset) else None
       val lastRecord = new LastRecord(
         if(lastDataOffset.isEmpty) OptionalLong.empty() else OptionalLong.of(lastDataOffset.get),
         producerIdEntry.producerEpoch)
-      producerId -> lastRecord
+      producerId.toLong -> lastRecord
     }
-  }
+  }.toMap
 
   /**
    * The number of segments in the log.
@@ -1012,7 +1012,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   private def maybeIncrementFirstUnstableOffset(): Unit = lock synchronized {
     localLog.checkIfMemoryMappedBufferClosed()
 
-    val updatedFirstUnstableOffset = producerStateManager.firstUnstableOffset match {
+    val updatedFirstUnstableOffset = producerStateManager.firstUnstableOffset.asScala match {
       case Some(logOffsetMetadata) if logOffsetMetadata.messageOffsetOnly || logOffsetMetadata.messageOffset < logStartOffset =>
         val offset = math.max(logOffsetMetadata.messageOffset, logStartOffset)
         Some(convertToOffsetMetadataOrThrow(offset))
@@ -1077,7 +1077,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         if (origin == AppendOrigin.CLIENT) {
           val maybeLastEntry = producerStateManager.lastEntry(batch.producerId)
 
-          maybeLastEntry.flatMap(_.findDuplicateBatch(batch).asScala).foreach { duplicate =>
+          maybeLastEntry.flatMap(_.findDuplicateBatch(batch)).asScala.foreach { duplicate =>
             return (updatedProducers, completedTxns.toList, Some(duplicate))
           }
         }
@@ -1657,12 +1657,12 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   // visible for testing
   private[log] def latestProducerSnapshotOffset: Option[Long] = lock synchronized {
-    producerStateManager.latestSnapshotOffset
+    producerStateManager.latestSnapshotOffset.asScala
   }
 
   // visible for testing
   private[log] def oldestProducerSnapshotOffset: Option[Long] = lock synchronized {
-    producerStateManager.oldestSnapshotOffset
+    producerStateManager.oldestSnapshotOffset.asScala
   }
 
   // visible for testing
@@ -2096,7 +2096,7 @@ object UnifiedLog extends Logging {
     // (or later snapshots). Otherwise, if there is no snapshot file, then we have to rebuild producer state
     // from the first segment.
     if (recordVersion.value < RecordBatch.MAGIC_VALUE_V2 ||
-      (producerStateManager.latestSnapshotOffset.isEmpty && reloadFromCleanShutdown)) {
+      (producerStateManager.latestSnapshotOffset.asScala.isEmpty && reloadFromCleanShutdown)) {
       // To avoid an expensive scan through all of the segments, we take empty snapshots from the start of the
       // last two segments and the last offset. This should avoid the full scan in the case that the log needs
       // truncation.
@@ -2169,7 +2169,7 @@ object UnifiedLog extends Logging {
                                            parentDir: String,
                                            topicPartition: TopicPartition): Unit = {
     val snapshotsToDelete = segments.flatMap { segment =>
-      producerStateManager.removeAndMarkSnapshotForDeletion(segment.baseOffset)
+      producerStateManager.removeAndMarkSnapshotForDeletion(segment.baseOffset).asScala
     }
 
     def deleteProducerSnapshots(): Unit = {
