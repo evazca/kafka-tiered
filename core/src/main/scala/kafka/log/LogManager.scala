@@ -23,26 +23,26 @@ import java.io._
 import java.nio.file.Files
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.Properties
+
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.server.metadata.ConfigRepository
 import kafka.server._
 import kafka.utils._
 import org.apache.kafka.common.{KafkaException, TopicPartition, Uuid}
-import org.apache.kafka.common.utils.{KafkaThread, Time, Utils}
+import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.common.errors.{InconsistentTopicIdException, KafkaStorageException, LogDirNotFoundException}
+import org.apache.kafka.common.utils.{KafkaThread, Time, Utils}
+import org.apache.kafka.server.common.MetadataVersion
+import org.apache.kafka.server.log.internals.{CleanerConfig, LogConfig, LogDirFailureChannel, ProducerStateManagerConfig}
+import org.apache.kafka.server.log.internals.LogConfig.MessageFormatVersion
 
 import scala.jdk.CollectionConverters._
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import kafka.utils.Implicits._
-import org.apache.kafka.common.config.TopicConfig
-
-import java.util.Properties
-import org.apache.kafka.server.common.MetadataVersion
-import org.apache.kafka.server.log.internals.{CleanerConfig, LogConfig, LogDirFailureChannel}
-import org.apache.kafka.server.log.internals.LogConfig.MessageFormatVersion
 
 import scala.annotation.nowarn
 

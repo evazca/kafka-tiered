@@ -18,7 +18,7 @@
 package kafka.server.builders;
 
 import kafka.log.LogManager;
-import kafka.log.ProducerStateManagerConfig;
+import org.apache.kafka.server.log.internals.ProducerStateManagerConfig;
 import kafka.server.BrokerTopicStats;
 import kafka.server.metadata.ConfigRepository;
 import kafka.utils.Scheduler;
