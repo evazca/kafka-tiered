@@ -17,14 +17,13 @@
 package kafka.log
 
 import java.io.File
-
-import kafka.server.checkpoints.LeaderEpochCheckpoint
-import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
+import kafka.server.epoch.LeaderEpochFileCache
 import kafka.utils.TestUtils
 import kafka.utils.TestUtils.checkEquals
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{MockTime, Time, Utils}
+import org.apache.kafka.server.log.internals.{EpochEntry, LeaderEpochCheckpoint}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 
@@ -380,11 +379,11 @@ class LogSegmentTest {
     val checkpoint: LeaderEpochCheckpoint = new LeaderEpochCheckpoint {
       private var epochs = Seq.empty[EpochEntry]
 
-      override def write(epochs: Iterable[EpochEntry]): Unit = {
-        this.epochs = epochs.toVector
+      override def write(epochs: java.util.List[EpochEntry]): Unit = {
+        this.epochs = epochs.asScala.toSeq
       }
 
-      override def read(): Seq[EpochEntry] = this.epochs
+      override def read(): java.util.List[EpochEntry] = this.epochs.asJava
     }
 
     val cache = new LeaderEpochFileCache(topicPartition, checkpoint)
@@ -405,9 +404,9 @@ class LogSegmentTest {
         new SimpleRecord("a".getBytes), new SimpleRecord("b".getBytes)))
 
     seg.recover(newProducerStateManager(), Some(cache))
-    assertEquals(ArrayBuffer(EpochEntry(epoch = 0, startOffset = 104L),
-                             EpochEntry(epoch = 1, startOffset = 106),
-                             EpochEntry(epoch = 2, startOffset = 110)),
+    assertEquals(ArrayBuffer(new EpochEntry(0, 104L),
+                             new EpochEntry(1, 106),
+                             new EpochEntry(2, 110)),
       cache.epochEntries)
   }
 

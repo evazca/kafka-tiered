@@ -21,7 +21,6 @@ import kafka.log.remote.RemoteLogManager
 
 import java.io.File
 import java.util.Properties
-import kafka.server.checkpoints.LeaderEpochCheckpointFile
 import kafka.server.{BrokerTopicStats, FetchDataInfo, FetchIsolation, FetchLogEnd}
 import kafka.utils.{Scheduler, TestUtils}
 import org.apache.kafka.common.Uuid
@@ -33,9 +32,8 @@ import org.junit.jupiter.api.Assertions.{assertEquals, assertFalse}
 import java.nio.file.Files
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import kafka.log
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, LazyIndex, TransactionIndex}
+import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, LazyIndex, LeaderEpochCheckpointFile, TransactionIndex}
 
-import scala.collection.Iterable
 import scala.jdk.CollectionConverters._
 
 object LogTestUtils {
