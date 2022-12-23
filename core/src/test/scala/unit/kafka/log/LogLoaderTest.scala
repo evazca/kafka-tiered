@@ -17,7 +17,6 @@
 
 package kafka.log
 
-import kafka.server.epoch.LeaderEpochFileCache
 import kafka.server.metadata.MockConfigRepository
 import kafka.server.{BrokerTopicStats, FetchDataInfo, KafkaConfig}
 import kafka.utils.{CoreUtils, MockTime, Scheduler, TestUtils}
@@ -27,7 +26,7 @@ import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.IBP_0_11_0_IV0
-import org.apache.kafka.server.log.internals.{AbortedTxn, EpochEntry, LogDirFailureChannel, OffsetIndex}
+import org.apache.kafka.server.log.internals._
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.function.Executable
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
@@ -1372,11 +1371,11 @@ class LogLoaderTest {
     val fourthBatch = singletonRecordsWithLeaderEpoch(value = "random".getBytes, leaderEpoch = 3, offset = 3)
     log.appendAsFollower(records = fourthBatch)
 
-    assertEquals(ListBuffer(new EpochEntry(1, 0), new EpochEntry(2, 1), new EpochEntry(3, 3)), leaderEpochCache.epochEntries)
+    assertEquals(java.util.Arrays.asList(new EpochEntry(1, 0), new EpochEntry(2, 1), new EpochEntry(3, 3)), leaderEpochCache.epochEntries)
 
     // deliberately remove some of the epoch entries
     leaderEpochCache.truncateFromEnd(2)
-    assertNotEquals(ListBuffer(new EpochEntry(1, 0), new EpochEntry(2, 1), new EpochEntry(3, 3)), leaderEpochCache.epochEntries)
+    assertNotEquals(java.util.Arrays.asList(new EpochEntry(1, 0), new EpochEntry(2, 1), new EpochEntry(3, 3)), leaderEpochCache.epochEntries)
     log.close()
 
     // reopen the log and recover from the beginning
@@ -1384,7 +1383,7 @@ class LogLoaderTest {
     val recoveredLeaderEpochCache = recoveredLog.leaderEpochCache.get
 
     // epoch entries should be recovered
-    assertEquals(ListBuffer(new EpochEntry(1, 0), new EpochEntry(2, 1), new EpochEntry(3, 3)), recoveredLeaderEpochCache.epochEntries)
+    assertEquals(java.util.Arrays.asList(new EpochEntry(1, 0), new EpochEntry(2, 1), new EpochEntry(3, 3)), recoveredLeaderEpochCache.epochEntries)
     recoveredLog.close()
   }
 

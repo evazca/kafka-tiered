@@ -16,19 +16,17 @@
  */
 package kafka.log
 
-import java.io.File
-import kafka.server.epoch.LeaderEpochFileCache
 import kafka.utils.TestUtils
 import kafka.utils.TestUtils.checkEquals
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{MockTime, Time, Utils}
-import org.apache.kafka.server.log.internals.{EpochEntry, LeaderEpochCheckpoint}
+import org.apache.kafka.server.log.internals.{EpochEntry, LeaderEpochCheckpoint, LeaderEpochFileCache}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 
+import java.io.File
 import scala.collection._
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 class LogSegmentTest {
@@ -404,7 +402,7 @@ class LogSegmentTest {
         new SimpleRecord("a".getBytes), new SimpleRecord("b".getBytes)))
 
     seg.recover(newProducerStateManager(), Some(cache))
-    assertEquals(ArrayBuffer(new EpochEntry(0, 104L),
+    assertEquals(java.util.Arrays.asList(new EpochEntry(0, 104L),
                              new EpochEntry(1, 106),
                              new EpochEntry(2, 110)),
       cache.epochEntries)
