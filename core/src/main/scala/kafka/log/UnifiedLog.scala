@@ -18,20 +18,10 @@
 package kafka.log
 
 import com.yammer.metrics.core.MetricName
-
-import java.io.{File, IOException}
-import java.nio.file.Files
-import java.util.Optional
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import kafka.common.{OffsetsOutOfOrderException, UnexpectedAppendOffsetException}
 import kafka.log.remote.RemoteLogManager
 import kafka.metrics.KafkaMetricsGroup
-<<<<<<< HEAD
-import kafka.server.epoch.LeaderEpochFileCache
 import kafka.server.{BrokerTopicMetrics, BrokerTopicStats, FetchDataInfo, FetchHighWatermark, FetchIsolation, FetchLogEnd, FetchTxnCommitted, OffsetAndEpoch, PartitionMetadataFile, RequestLocal}
-=======
-import kafka.server.{BrokerTopicMetrics, BrokerTopicStats, FetchDataInfo, FetchHighWatermark, FetchIsolation, FetchLogEnd, FetchTxnCommitted, LogOffsetMetadata, OffsetAndEpoch, PartitionMetadataFile, RequestLocal}
->>>>>>> 9aa2220ead (KAFKA-14551 Move LeaderEpochFileCache to the storage module.)
 import kafka.utils._
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.Topic
@@ -45,14 +35,14 @@ import org.apache.kafka.common.utils.{PrimitiveRef, Time, Utils}
 import org.apache.kafka.common.{InvalidRecordException, KafkaException, TopicPartition, Uuid}
 import org.apache.kafka.server.common.MetadataVersion
 import org.apache.kafka.server.common.MetadataVersion.IBP_0_10_0_IV0
-<<<<<<< HEAD
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LeaderEpochCheckpointFile, LogDirFailureChannel, LogOffsetMetadata, LogValidator}
-=======
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, EpochEntry, LeaderEpochCheckpointFile, LeaderEpochFileCache, LogDirFailureChannel, LogValidator}
->>>>>>> 9aa2220ead (KAFKA-14551 Move LeaderEpochFileCache to the storage module.)
+import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, EpochEntry, LeaderEpochCheckpointFile, LeaderEpochFileCache, LogDirFailureChannel, LogOffsetMetadata, LogValidator}
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.record.BrokerCompressionType
 
+import java.io.{File, IOException}
+import java.nio.file.Files
+import java.util.Optional
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import scala.annotation.nowarn
 import scala.collection.mutable.ListBuffer
 import scala.collection.{Seq, immutable, mutable}

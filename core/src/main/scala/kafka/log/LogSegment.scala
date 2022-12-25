@@ -17,32 +17,22 @@
 package kafka.log
 
 import com.yammer.metrics.core.Timer
-
-import java.io.{File, IOException}
-import java.nio.file.{Files, NoSuchFileException}
-import java.nio.file.attribute.FileTime
-import java.util.concurrent.TimeUnit
 import kafka.common.LogSegmentOffsetOverflowException
 import kafka.metrics.KafkaMetricsGroup
-<<<<<<< HEAD
-import kafka.server.epoch.LeaderEpochFileCache
 import kafka.server.FetchDataInfo
-=======
-import kafka.server.{FetchDataInfo, LogOffsetMetadata}
->>>>>>> 9aa2220ead (KAFKA-14551 Move LeaderEpochFileCache to the storage module.)
 import kafka.utils._
 import org.apache.kafka.common.InvalidRecordException
 import org.apache.kafka.common.errors.CorruptRecordException
 import org.apache.kafka.common.record.FileRecords.{LogOffsetPosition, TimestampAndOffset}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.{BufferSupplier, Time}
-<<<<<<< HEAD
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LazyIndex, LogOffsetMetadata, OffsetIndex, OffsetPosition, TimeIndex, TimestampOffset, TransactionIndex, TxnIndexSearchResult}
-=======
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, CompletedTxn, LazyIndex, LeaderEpochFileCache, OffsetIndex, OffsetPosition, TimeIndex, TimestampOffset, TransactionIndex, TxnIndexSearchResult}
->>>>>>> 9aa2220ead (KAFKA-14551 Move LeaderEpochFileCache to the storage module.)
+import org.apache.kafka.server.log.internals._
 
+import java.io.{File, IOException}
+import java.nio.file.attribute.FileTime
+import java.nio.file.{Files, NoSuchFileException}
 import java.util.Optional
+import java.util.concurrent.TimeUnit
 import scala.compat.java8.OptionConverters._
 import scala.jdk.CollectionConverters._
 import scala.math._

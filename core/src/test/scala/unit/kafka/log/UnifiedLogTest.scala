@@ -17,21 +17,10 @@
 
 package kafka.log
 
-import java.io._
-import java.nio.ByteBuffer
-import java.nio.file.Files
-import java.util.concurrent.{Callable, ConcurrentHashMap, Executors}
-import java.util.{Optional, Properties}
 import kafka.common.{OffsetsOutOfOrderException, UnexpectedAppendOffsetException}
 import kafka.log.remote.RemoteLogManager
-<<<<<<< HEAD
-import kafka.server.epoch.LeaderEpochFileCache
 import kafka.server.{BrokerTopicStats, FetchHighWatermark, FetchIsolation, FetchLogEnd, FetchTxnCommitted, KafkaConfig, PartitionMetadataFile}
-=======
-import kafka.server.{BrokerTopicStats, FetchHighWatermark, FetchIsolation, FetchLogEnd, FetchTxnCommitted, KafkaConfig, LogOffsetMetadata, PartitionMetadataFile}
->>>>>>> 9aa2220ead (KAFKA-14551 Move LeaderEpochFileCache to the storage module.)
 import kafka.utils._
-import org.apache.kafka.common.{InvalidRecordException, TopicPartition, Uuid}
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.message.FetchResponseData
@@ -40,11 +29,8 @@ import org.apache.kafka.common.record.MemoryRecords.RecordFilter
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.requests.{ListOffsetsRequest, ListOffsetsResponse}
 import org.apache.kafka.common.utils.{BufferSupplier, Time, Utils}
-<<<<<<< HEAD
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, EpochEntry, LeaderEpochCheckpointFile, LogOffsetMetadata, RecordValidationException}
-=======
-import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, EpochEntry, LeaderEpochCheckpointFile, LeaderEpochFileCache, RecordValidationException}
->>>>>>> 9aa2220ead (KAFKA-14551 Move LeaderEpochFileCache to the storage module.)
+import org.apache.kafka.common.{InvalidRecordException, TopicPartition, Uuid}
+import org.apache.kafka.server.log.internals.{AbortedTxn, AppendOrigin, EpochEntry, LeaderEpochCheckpointFile, LeaderEpochFileCache, LogOffsetMetadata, RecordValidationException}
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.metrics.KafkaYammerMetrics
 import org.junit.jupiter.api.Assertions._
@@ -53,11 +39,16 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mockito.{mock, when}
 
+import java.io._
+import java.nio.ByteBuffer
+import java.nio.file.Files
+import java.util.concurrent.{Callable, ConcurrentHashMap, Executors}
+import java.util.{Optional, Properties}
 import scala.annotation.nowarn
 import scala.collection.Map
+import scala.collection.mutable.ListBuffer
 import scala.compat.java8.OptionConverters._
 import scala.jdk.CollectionConverters._
-import scala.collection.mutable.ListBuffer
 
 class UnifiedLogTest {
   var config: KafkaConfig = _
