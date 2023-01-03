@@ -686,7 +686,9 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
   private[log] def lastRecordsOfActiveProducers: Map[Long, LastRecord] = lock synchronized {
     producerStateManager.activeProducers.map { case (producerId, producerIdEntry) =>
-      val lastDataOffset = if (producerIdEntry.lastDataOffset >= 0 ) Some(producerIdEntry.lastDataOffset) else None
+      val lastDataOffset =
+        if (producerIdEntry.lastDataOffset >= 0) OptionalLong.of(producerIdEntry.lastDataOffset)
+        else OptionalLong.empty()
       val lastRecord = new LastRecord(lastDataOffset, producerIdEntry.producerEpoch)
       producerId -> lastRecord
     }
@@ -1979,7 +1981,7 @@ object UnifiedLog extends Logging {
                               origin: AppendOrigin): Option[CompletedTxn] = {
     val producerId = batch.producerId
     val appendInfo = producers.getOrElseUpdate(producerId, producerStateManager.prepareUpdate(producerId, origin))
-    appendInfo.append(batch, firstOffsetMetadata)
+    appendInfo.append(batch, firstOffsetMetadata.asJava).asScala
   }
 
   /**
