@@ -29,18 +29,11 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.{Files, NoSuchFileException, StandardOpenOption}
+import java.util
 import java.util.OptionalLong
 import java.util.concurrent.ConcurrentSkipListMap
 import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
-
-
-
-
-
-
-
-
 
 object ProducerStateManager {
   val LateTransactionBufferMs = 5 * 60 * 1000
@@ -101,9 +94,9 @@ object ProducerStateManager {
         val offsetDelta = producerEntryStruct.getInt(OffsetDeltaField)
         val coordinatorEpoch = producerEntryStruct.getInt(CoordinatorEpochField)
         val currentTxnFirstOffset = producerEntryStruct.getLong(CurrentTxnFirstOffsetField)
-        val lastAppendedDataBatches = new java.util.ArrayDeque[BatchMetadata]
-        if (offset >= 0)
-          lastAppendedDataBatches.add(new BatchMetadata(seq, offset, offsetDelta, timestamp))
+        val lastAppendedDataBatches = new util.ArrayDeque[BatchMetadata]()
+          if (offset >= 0)
+            lastAppendedDataBatches.add(new BatchMetadata(seq, offset, offsetDelta, timestamp))
 
         val currentTxnFirstOffsetValue = if (currentTxnFirstOffset >= 0) OptionalLong.of(currentTxnFirstOffset) else OptionalLong.empty()
         new ProducerStateEntry(producerId, lastAppendedDataBatches, producerEpoch,

@@ -170,17 +170,14 @@ public class ProducerAppendInfo {
         updatedEntry.addBatch(epoch, lastSeq, lastOffset, (int) (lastOffset - firstOffset), lastTimestamp);
 
         OptionalLong currentTxnFirstOffset = updatedEntry.currentTxnFirstOffset;
-        if (currentTxnFirstOffset.isPresent()) {
-            if (!isTransactional)
-                // Received a non-transactional message while a transaction is active
-                throw new InvalidTxnStateException("Expected transactional write from producer " + producerId + " at " +
-                        "offset " + firstOffsetMetadata + " in partition " + topicPartition);
-        } else {
-            if (isTransactional) {
-                // Began a new transaction
-                updatedEntry.currentTxnFirstOffset = OptionalLong.of(firstOffset);
-                transactions.add(new TxnMetadata(producerId, firstOffsetMetadata));
-            }
+        if (currentTxnFirstOffset.isPresent() && !isTransactional) {
+            // Received a non-transactional message while a transaction is active
+            throw new InvalidTxnStateException("Expected transactional write from producer " + producerId + " at " +
+                    "offset " + firstOffsetMetadata + " in partition " + topicPartition);
+        } else if (isTransactional) {
+            // Began a new transaction
+            updatedEntry.currentTxnFirstOffset = OptionalLong.of(firstOffset);
+            transactions.add(new TxnMetadata(producerId, firstOffsetMetadata));
         }
     }
 

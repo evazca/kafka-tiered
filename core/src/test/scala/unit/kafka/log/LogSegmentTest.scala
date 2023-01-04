@@ -17,9 +17,7 @@
 package kafka.log
 
 import java.io.File
-import java.util
 import java.util.OptionalLong
-
 import kafka.server.checkpoints.LeaderEpochCheckpoint
 import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
 import kafka.utils.TestUtils
@@ -32,6 +30,7 @@ import org.apache.kafka.server.log.internals.{BatchMetadata, LogConfig, Producer
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 
+import java.util
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -358,10 +357,9 @@ class LogSegmentTest {
 
     // recover again, but this time assuming the transaction from pid2 began on a previous segment
     stateManager = newProducerStateManager()
-    val batchMetadata = new util.ArrayDeque[BatchMetadata]()
-    batchMetadata.add(new BatchMetadata(10, 10L, 5, RecordBatch.NO_TIMESTAMP))
-    stateManager.loadProducerEntry(new ProducerStateEntry(pid2, batchMetadata, producerEpoch,0,
-      RecordBatch.NO_TIMESTAMP, OptionalLong.of(75L)))
+    val bacthes = new util.ArrayDeque[BatchMetadata]()
+    bacthes.add(new BatchMetadata(10, 10L, 5, RecordBatch.NO_TIMESTAMP))
+    stateManager.loadProducerEntry(new ProducerStateEntry(pid2, bacthes, producerEpoch, 0, RecordBatch.NO_TIMESTAMP, OptionalLong.of(75L)))
     segment.recover(stateManager)
     assertEquals(108L, stateManager.mapEndOffset)
 

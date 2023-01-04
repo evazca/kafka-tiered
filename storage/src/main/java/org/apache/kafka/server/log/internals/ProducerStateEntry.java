@@ -33,7 +33,7 @@ import java.util.stream.Stream;
  */
 public class ProducerStateEntry {
     public static final int NUM_BATCHES_TO_RETAIN = 5;
-    public final long producerId;
+    private final long producerId;
     private final Deque<BatchMetadata> batchMetadata;
     private short producerEpoch;
     public int coordinatorEpoch;
@@ -123,6 +123,10 @@ public class ProducerStateEntry {
 
     public Collection<BatchMetadata> batchMetadata() {
         return Collections.unmodifiableCollection(batchMetadata);
+    }
+
+    public long producerId() {
+        return producerId;
     }
 
     public short producerEpoch() {
