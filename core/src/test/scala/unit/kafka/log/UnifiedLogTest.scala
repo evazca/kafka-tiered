@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.util.concurrent.{Callable, ConcurrentHashMap, Executors}
-import java.util.{Optional, Properties}
+import java.util.{Optional, OptionalLong, Properties}
 import kafka.common.{OffsetsOutOfOrderException, UnexpectedAppendOffsetException}
 import kafka.log.remote.RemoteLogManager
 import kafka.server.checkpoints.LeaderEpochCheckpointFile
@@ -49,10 +49,8 @@ import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mockito.{mock, when}
 
 import scala.annotation.nowarn
-import scala.collection.Map
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ListBuffer
-import scala.compat.java8.OptionConverters._
 
 class UnifiedLogTest {
   var config: KafkaConfig = _
@@ -180,9 +178,7 @@ class UnifiedLogTest {
     testTruncateBelowFirstUnstableOffset(_.truncateFullyAndStartAt)
   }
 
-  private def testTruncateBelowFirstUnstableOffset(
-    truncateFunc: UnifiedLog => (Long => Unit)
-  ): Unit = {
+  private def testTruncateBelowFirstUnstableOffset(truncateFunc: UnifiedLog => (Long => Unit)): Unit = {
     // Verify that truncation below the first unstable offset correctly
     // resets the producer state. Specifically we are testing the case when
     // the segment position of the first unstable offset is unknown.
@@ -216,11 +212,11 @@ class UnifiedLogTest {
     log.close()
 
     val reopened = createLog(logDir, logConfig)
-    assertEquals(Some(new LogOffsetMetadata(3L)), reopened.producerStateManager.firstUnstableOffset)
+    assertEquals(Optional.of(new LogOffsetMetadata(3L)), reopened.producerStateManager.firstUnstableOffset)
 
     truncateFunc(reopened)(0L)
     assertEquals(None, reopened.firstUnstableOffset)
-    assertEquals(Map.empty, reopened.producerStateManager.activeProducers)
+    assertTrue(reopened.producerStateManager.activeProducers.isEmpty)
   }
 
   @Test
@@ -664,7 +660,7 @@ class UnifiedLogTest {
     // snapshot files, and then reloading the log
     val logConfig = LogTestUtils.createLogConfig(segmentBytes = 64 * 10)
     var log = createLog(logDir, logConfig)
-    assertEquals(None, log.oldestProducerSnapshotOffset)
+    assertEquals(OptionalLong.empty(), log.oldestProducerSnapshotOffset)
 
     for (i <- 0 to 100) {
       val record = new SimpleRecord(mockTime.milliseconds, i.toString.getBytes)
@@ -738,7 +734,7 @@ class UnifiedLogTest {
     val records = TestUtils.records(List(new SimpleRecord(mockTime.milliseconds, "key".getBytes, "value".getBytes)))
     log.appendAsLeader(records, leaderEpoch = 0)
     log.takeProducerSnapshot()
-    assertEquals(Some(1), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1), log.latestProducerSnapshotOffset)
   }
 
   @Test
@@ -873,15 +869,15 @@ class UnifiedLogTest {
     log.takeProducerSnapshot()
 
     log.truncateTo(2)
-    assertEquals(Some(2), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(2), log.latestProducerSnapshotOffset)
     assertEquals(2, log.latestProducerStateEndOffset)
 
     log.truncateTo(1)
-    assertEquals(Some(1), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1), log.latestProducerSnapshotOffset)
     assertEquals(1, log.latestProducerStateEndOffset)
 
     log.truncateTo(0)
-    assertEquals(None, log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.empty(), log.latestProducerSnapshotOffset)
     assertEquals(0, log.latestProducerStateEndOffset)
   }
 
@@ -1052,11 +1048,11 @@ class UnifiedLogTest {
 
     assertEquals(3, log.logSegments.size)
     assertEquals(3, log.latestProducerStateEndOffset)
-    assertEquals(Some(3), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(3), log.latestProducerSnapshotOffset)
 
     log.truncateFullyAndStartAt(29)
     assertEquals(1, log.logSegments.size)
-    assertEquals(None, log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.empty(), log.latestProducerSnapshotOffset)
     assertEquals(29, log.latestProducerStateEndOffset)
   }
 
@@ -1093,25 +1089,25 @@ class UnifiedLogTest {
     val log = createLog(logDir, logConfig)
     log.appendAsLeader(TestUtils.singletonRecords("a".getBytes), leaderEpoch = 0)
     log.roll(Some(1L))
-    assertEquals(Some(1L), log.latestProducerSnapshotOffset)
-    assertEquals(Some(1L), log.oldestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1L), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1L), log.oldestProducerSnapshotOffset)
 
     log.appendAsLeader(TestUtils.singletonRecords("b".getBytes), leaderEpoch = 0)
     log.roll(Some(2L))
-    assertEquals(Some(2L), log.latestProducerSnapshotOffset)
-    assertEquals(Some(1L), log.oldestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(2L), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1L), log.oldestProducerSnapshotOffset)
 
     log.appendAsLeader(TestUtils.singletonRecords("c".getBytes), leaderEpoch = 0)
     log.roll(Some(3L))
-    assertEquals(Some(3L), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(3L), log.latestProducerSnapshotOffset)
 
     // roll triggers a flush at the starting offset of the new segment, we should retain all snapshots
-    assertEquals(Some(1L), log.oldestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1L), log.oldestProducerSnapshotOffset)
 
     // even if we flush within the active segment, the snapshot should remain
     log.appendAsLeader(TestUtils.singletonRecords("baz".getBytes), leaderEpoch = 0)
     log.flushUptoOffsetExclusive(4L)
-    assertEquals(Some(3L), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(3L), log.latestProducerSnapshotOffset)
   }
 
   @Test
@@ -1131,7 +1127,7 @@ class UnifiedLogTest {
 
     assertEquals(2, log.logSegments.size)
     assertEquals(1L, log.activeSegment.baseOffset)
-    assertEquals(Some(1L), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1L), log.latestProducerSnapshotOffset)
 
     // Force a reload from the snapshot to check its consistency
     log.truncateTo(1L)
@@ -1139,10 +1135,10 @@ class UnifiedLogTest {
     assertEquals(2, log.logSegments.size)
     assertEquals(1L, log.activeSegment.baseOffset)
     assertTrue(log.activeSegment.log.batches.asScala.isEmpty)
-    assertEquals(Some(1L), log.latestProducerSnapshotOffset)
+    assertEquals(OptionalLong.of(1L), log.latestProducerSnapshotOffset)
 
-    val lastEntry = log.producerStateManager.lastEntry(producerId).asScala
-    assertTrue(lastEntry.isDefined)
+    val lastEntry = log.producerStateManager.lastEntry(producerId)
+    assertTrue(lastEntry.isPresent)
     assertEquals(0L, lastEntry.get.firstDataOffset)
     assertEquals(0L, lastEntry.get.lastDataOffset)
   }
@@ -3089,7 +3085,7 @@ class UnifiedLogTest {
   }
 
   private def assertCachedFirstUnstableOffset(log: UnifiedLog, expectedOffset: Long): Unit = {
-    assertTrue(log.producerStateManager.firstUnstableOffset.asScala.isDefined)
+    assertTrue(log.producerStateManager.firstUnstableOffset.isPresent)
     val firstUnstableOffset = log.producerStateManager.firstUnstableOffset.get
     assertEquals(expectedOffset, firstUnstableOffset.messageOffset)
     assertFalse(firstUnstableOffset.messageOffsetOnly)

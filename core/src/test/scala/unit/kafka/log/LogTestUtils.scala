@@ -32,7 +32,6 @@ import org.junit.jupiter.api.Assertions.{assertEquals, assertFalse}
 
 import java.nio.file.Files
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
-import kafka.log
 import org.apache.kafka.common.config.TopicConfig
 import org.apache.kafka.server.util.Scheduler
 

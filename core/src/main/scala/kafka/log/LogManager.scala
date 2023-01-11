@@ -41,7 +41,7 @@ import org.apache.kafka.common.config.TopicConfig
 
 import java.util.Properties
 import org.apache.kafka.server.common.MetadataVersion
-import org.apache.kafka.server.log.internals.{CleanerConfig, LogConfig, LogDirFailureChannel}
+import org.apache.kafka.server.log.internals.{CleanerConfig, LogConfig, LogDirFailureChannel, ProducerStateManagerConfig}
 import org.apache.kafka.server.log.internals.LogConfig.MessageFormatVersion
 import org.apache.kafka.server.util.Scheduler
 
