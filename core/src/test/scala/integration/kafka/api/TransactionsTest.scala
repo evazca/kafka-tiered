@@ -653,6 +653,7 @@ class TransactionsTest extends IntegrationTestHarness {
 
       var producerStateEntry =
         brokers(partitionLeader).logManager.getLog(new TopicPartition(testTopic, 0)).get.producerStateManager.activeProducers.get(0)
+      assertNotNull(producerStateEntry)
       val producerId = producerStateEntry.producerId
       val initialProducerEpoch = producerStateEntry.producerEpoch
 
@@ -686,6 +687,7 @@ class TransactionsTest extends IntegrationTestHarness {
       // check there that the epoch has actually increased
       producerStateEntry =
         brokers(partitionLeader).logManager.getLog(new TopicPartition(testTopic, 0)).get.producerStateManager.activeProducers.get(producerId)
+      assertNotNull(producerStateEntry)
       assertTrue(producerStateEntry.producerEpoch > initialProducerEpoch)
     } finally {
       producer.close(Duration.ZERO)
@@ -707,6 +709,7 @@ class TransactionsTest extends IntegrationTestHarness {
     val partitionLeader = TestUtils.waitUntilLeaderIsKnown(brokers, new TopicPartition(topic1, 0))
     var producerStateEntry =
       brokers(partitionLeader).logManager.getLog(new TopicPartition(topic1, 0)).get.producerStateManager.activeProducers.get(0)
+    assertNotNull(producerStateEntry)
     val producerId = producerStateEntry.producerId
     val initialProducerEpoch = producerStateEntry.producerEpoch
 
@@ -749,6 +752,7 @@ class TransactionsTest extends IntegrationTestHarness {
     // Check that the epoch only increased by 1
     producerStateEntry =
       brokers(partitionLeader).logManager.getLog(new TopicPartition(topic1, 0)).get.producerStateManager.activeProducers.get(producerId)
+    assertNotNull(producerStateEntry)
     assertEquals((initialProducerEpoch + 1).toShort, producerStateEntry.producerEpoch)
   }
 
