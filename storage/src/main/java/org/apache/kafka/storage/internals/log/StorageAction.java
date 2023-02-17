@@ -20,7 +20,7 @@ package org.apache.kafka.storage.internals.log;
  * This interface is used to execute any storage related operations.
  *
  * @param <T> return type for execute operation
- * @param <E> Exception type to be thrown
+ * @param <E> Throwable type to be thrown
  */
 @FunctionalInterface
 public interface StorageAction<T, E extends Throwable> {

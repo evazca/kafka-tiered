@@ -44,6 +44,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static org.apache.kafka.storage.internals.log.LogFileUtils.INDEX_FILE_SUFFIX;
+import static org.apache.kafka.storage.internals.log.LogFileUtils.TIME_INDEX_FILE_SUFFIX;
+import static org.apache.kafka.storage.internals.log.LogFileUtils.TXN_INDEX_FILE_SUFFIX;
+
 /**
  * This is a LRU cache of remote index files stored in `$logdir/remote-log-index-cache`. This is helpful to avoid
  * re-fetching the index files like offset, time indexes from the remote storage for every fetch call.
@@ -56,20 +60,15 @@ public class RemoteIndexCache implements Closeable {
 
     // All the below suffixes will be replaced with UnifiedLog once it is moved to storage module.
     private static final String TMP_FILE_SUFFIX = ".tmp";
-    private static final String DELETED_FILE_SUFFIX = ".deleted";
-    private static final String INDEX_FILE_SUFFIX = ".index";
-    private static final String TIME_INDEX_FILE_SUFFIX = ".timeindex";
-    private static final String TXN_INDEX_FILE_SUFFIX = ".txnindex";
 
     private final File cacheDir;
-    private volatile boolean closed = false;
-
     private final LinkedBlockingQueue<Entry> expiredIndexes = new LinkedBlockingQueue<>();
     private final Object lock = new Object();
     private final RemoteStorageManager remoteStorageManager;
     private final Map<Uuid, Entry> entries;
-
     private final ShutdownableThread cleanerThread;
+
+    private volatile boolean closed = false;
 
     public RemoteIndexCache(RemoteStorageManager remoteStorageManager, String logDir) throws IOException {
         this(1024, remoteStorageManager, logDir);
@@ -140,7 +139,7 @@ public class RemoteIndexCache implements Closeable {
         // Delete any .deleted files remained from the earlier run of the broker.
         try (Stream<Path> paths = Files.list(cacheDir.toPath())) {
             paths.forEach(path -> {
-                if (path.endsWith(DELETED_FILE_SUFFIX)) {
+                if (path.endsWith(LogFileUtils.DELETED_FILE_SUFFIX)) {
                     try {
                         Files.deleteIfExists(path);
                     } catch (IOException e) {
@@ -357,8 +356,8 @@ public class RemoteIndexCache implements Closeable {
                 if (!markedForCleanup) {
                     markedForCleanup = true;
 
-                    offsetIndex.renameTo(new File(Utils.replaceSuffix(offsetIndex.file().getPath(), "", DELETED_FILE_SUFFIX)));
-                    txnIndex.renameTo(new File(Utils.replaceSuffix(txnIndex.file().getPath(), "", DELETED_FILE_SUFFIX)));
+                    offsetIndex.renameTo(new File(Utils.replaceSuffix(offsetIndex.file().getPath(), "", LogFileUtils.DELETED_FILE_SUFFIX)));
+                    txnIndex.renameTo(new File(Utils.replaceSuffix(txnIndex.file().getPath(), "", LogFileUtils.DELETED_FILE_SUFFIX)));
                 }
             } finally {
                 lock.writeLock().unlock();

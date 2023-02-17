@@ -599,16 +599,16 @@ object LocalLog extends Logging {
   private[log] val LogFileSuffix = ".log"
 
   /** an index file */
-  private[log] val IndexFileSuffix = ".index"
+  private[log] val IndexFileSuffix = LogFileUtils.INDEX_FILE_SUFFIX
 
   /** a time index file */
-  private[log] val TimeIndexFileSuffix = ".timeindex"
+  private[log] val TimeIndexFileSuffix = LogFileUtils.TIME_INDEX_FILE_SUFFIX
 
   /** an (aborted) txn index */
-  private[log] val TxnIndexFileSuffix = ".txnindex"
+  private[log] val TxnIndexFileSuffix = LogFileUtils.TXN_INDEX_FILE_SUFFIX
 
   /** a file that is scheduled to be deleted */
-  private[log] val DeletedFileSuffix = ".deleted"
+  private[log] val DeletedFileSuffix = LogFileUtils.DELETED_FILE_SUFFIX
 
   /** A temporary file that is being used for log cleaning */
   private[log] val CleanedFileSuffix = ".cleaned"

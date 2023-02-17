@@ -32,6 +32,21 @@ public final class LogFileUtils {
      */
     public static final String DELETED_FILE_SUFFIX = ".deleted";
 
+    /**
+     * Suffix of offset index file
+     */
+    public static final String INDEX_FILE_SUFFIX = ".index";
+
+    /**
+     * Suffix of a time index file
+     */
+    public static final String TIME_INDEX_FILE_SUFFIX = ".timeindex";
+
+    /**
+     * Suffix of an (aborted) txn index file
+     */
+    public static final String TXN_INDEX_FILE_SUFFIX = ".txnindex";
+
     private LogFileUtils() {
     }
 
@@ -72,7 +87,6 @@ public final class LogFileUtils {
         nf.setGroupingUsed(false);
         return nf.format(offset);
     }
-
 
     /**
      * Invokes every function in `all` even if one or more functions throws an exception.
