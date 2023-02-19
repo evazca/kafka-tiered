@@ -58,7 +58,6 @@ public class RemoteIndexCache implements Closeable {
 
     public static final String DIR_NAME = "remote-log-index-cache";
 
-    // All the below suffixes will be replaced with UnifiedLog once it is moved to storage module.
     private static final String TMP_FILE_SUFFIX = ".tmp";
 
     private final File cacheDir;
@@ -181,11 +180,21 @@ public class RemoteIndexCache implements Closeable {
                             entries.put(uuid, entry);
                         } else {
                             // Delete all of them if any one of those indexes is not available for a specific segment id
-                            Files.deleteIfExists(offsetIndexFile.toPath());
-                            Files.deleteIfExists(timestampIndexFile.toPath());
-                            Files.deleteIfExists(txnIndexFile.toPath());
+                            LogFileUtils.tryAll(Arrays.asList(
+                                () -> {
+                                    Files.deleteIfExists(offsetIndexFile.toPath());
+                                    return null;
+                                },
+                                () -> {
+                                    Files.deleteIfExists(timestampIndexFile.toPath());
+                                    return null;
+                                },
+                                () -> {
+                                    Files.deleteIfExists(txnIndexFile.toPath());
+                                    return null;
+                                }));
                         }
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         throw new KafkaException(e);
                     }
                 }
@@ -378,7 +387,7 @@ public class RemoteIndexCache implements Closeable {
                     txnIndex.deleteIfExists();
                     return null;
                 }));
-            } catch (Throwable e) {
+            } catch (Exception e) {
                 throw new KafkaException(e);
             }
         }

@@ -93,17 +93,17 @@ public final class LogFileUtils {
      * If any of the functions throws an exception, the first one will be rethrown at the end with subsequent exceptions
      * added as suppressed exceptions.
      */
-    public static void tryAll(List<StorageAction<Void, Throwable>> all) throws Throwable {
-        Throwable exception = null;
+    public static void tryAll(List<StorageAction<Void, Exception>> all) throws Exception {
+        Exception exception = null;
 
-        for (StorageAction<Void, Throwable> runnable : all) {
+        for (StorageAction<Void, Exception> runnable : all) {
             try {
                 runnable.execute();
-            } catch (Throwable th) {
+            } catch (Exception ex) {
                 if (exception != null)
-                    exception.addSuppressed(th);
+                    exception.addSuppressed(ex);
                 else
-                    exception = th;
+                    exception = ex;
             }
         }
         if (exception != null)
