@@ -19,9 +19,9 @@ package kafka.log
 import java.io.File
 import java.util.Map
 import java.util.concurrent.{ConcurrentNavigableMap, ConcurrentSkipListMap}
-
 import kafka.utils.threadsafe
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.storage.internals.log.LogSegment
 
 import scala.jdk.CollectionConverters._
 

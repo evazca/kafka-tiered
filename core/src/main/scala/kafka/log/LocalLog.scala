@@ -31,7 +31,7 @@ import org.apache.kafka.common.record.MemoryRecords
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.apache.kafka.storage.internals.log.LogFileUtils.offsetFromFileName
 import org.apache.kafka.server.util.Scheduler
-import org.apache.kafka.storage.internals.log.{AbortedTxn, FetchDataInfo, LogConfig, LogDirFailureChannel, LogFileUtils, LogOffsetMetadata, OffsetPosition}
+import org.apache.kafka.storage.internals.log.{AbortedTxn, FetchDataInfo, LogConfig, LogDirFailureChannel, LogFileUtils, LogOffsetMetadata, LogSegment, OffsetPosition}
 
 import java.util.{Collections, Optional}
 import scala.jdk.CollectionConverters._
