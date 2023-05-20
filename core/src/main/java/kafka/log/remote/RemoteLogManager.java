@@ -607,17 +607,15 @@ public class RemoteLogManager implements Closeable {
                     return;
                 }
 
+                UnifiedLog log = unifiedLogOptional.get();
                 if (isLeader()) {
                     // Copy log segments to remote storage
-                    copyLogSegmentsToRemote(unifiedLogOptional.get());
+                    copyLogSegmentsToRemote(log);
                     // Cleanup/delete expired remote log segments
                     cleanupExpiredRemoteLogSegments();
                 } else {
-                    Optional<UnifiedLog> unifiedLogOptional = fetchLog.apply(topicIdPartition.topicPartition());
-                    if (unifiedLogOptional.isPresent()) {
-                        long offset = findHighestRemoteOffset(topicIdPartition);
-                        unifiedLogOptional.get().updateHighestOffsetInRemoteStorage(offset);
-                    }
+                    long offset = findHighestRemoteOffset(topicIdPartition, log);
+                    log.updateHighestOffsetInRemoteStorage(offset);
                 }
             } catch (InterruptedException ex) {
                 if (!isCancelled()) {
