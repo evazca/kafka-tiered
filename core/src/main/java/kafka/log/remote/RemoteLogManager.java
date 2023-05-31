@@ -151,6 +151,7 @@ public class RemoteLogManager implements Closeable {
      * @param logDir    directory of Kafka log segments.
      * @param time      Time instance.
      * @param fetchLog  function to get UnifiedLog instance for a given topic.
+     * @param updateRemoteLogStartOffset function to update the log-start-offset for a given topic partition.
      */
     public RemoteLogManager(RemoteLogManagerConfig rlmConfig,
                             int brokerId,

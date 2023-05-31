@@ -185,6 +185,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   def updateLogStartOffsetFromRemoteTier(remoteLogStartOffset: Long): Unit = {
     if (!remoteLogEnabled()) {
       warn("Ignoring the call as the remote log storage is disabled")
+      return;
     }
     maybeIncrementLogStartOffset(remoteLogStartOffset, LogStartOffsetIncrementReason.SegmentDeletion)
   }
