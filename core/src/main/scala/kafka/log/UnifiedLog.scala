@@ -1003,7 +1003,6 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 
         localLog.checkIfMemoryMappedBufferClosed()
         if (newLogStartOffset > logStartOffset) {
-          _localLogStartOffset = math.max(newLogStartOffset, localLogStartOffset())
           // it should always get updated  if tiered-storage is not enabled.
           if (!onlyLocalLogStartOffsetUpdate || !remoteLogEnabled()) {
             updatedLogStartOffset = true
@@ -1014,6 +1013,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
             producerStateManager.onLogStartOffsetIncremented(newLogStartOffset)
             maybeIncrementFirstUnstableOffset()
           } else {
+            _localLogStartOffset = math.max(newLogStartOffset, localLogStartOffset())
             info(s"Incrementing local log start offset to ${localLogStartOffset()}")
           }
         }
@@ -1478,12 +1478,8 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     }
   }
 
-  private[log] def localRetentionMs: Long = {
-    if (config.remoteLogConfig.remoteStorageEnable) config.remoteLogConfig.localRetentionMs else config.retentionMs
-  }
-
   private def deleteRetentionMsBreachedSegments(): Int = {
-    val retentionMs = localRetentionMs
+    val retentionMs = localRetentionMs(config)
     if (retentionMs < 0) return 0
     val startMs = time.milliseconds
 
@@ -1494,12 +1490,9 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     deleteOldSegments(shouldDelete, RetentionMsBreach(this))
   }
 
-  private[log] def localRetentionSize: Long = {
-    if (config.remoteLogConfig.remoteStorageEnable) config.remoteLogConfig.localRetentionBytes else config.retentionSize
-  }
 
   private def deleteRetentionSizeBreachedSegments(): Int = {
-    val retentionSize: Long = localRetentionSize
+    val retentionSize: Long = localRetentionSize(config)
     if (retentionSize < 0 || size < retentionSize) return 0
     var diff = size - retentionSize
     def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]): Boolean = {
@@ -2226,6 +2219,14 @@ object UnifiedLog extends Logging {
     }
   }
 
+  private[log] def localRetentionMs(config: LogConfig): Long = {
+    if (config.remoteLogConfig.remoteStorageEnable) config.remoteLogConfig.localRetentionMs else config.retentionMs
+  }
+
+  private[log] def localRetentionSize(config: LogConfig): Long = {
+    if (config.remoteLogConfig.remoteStorageEnable) config.remoteLogConfig.localRetentionBytes else config.retentionSize
+  }
+
 }
 
 object LogMetricNames {
@@ -2241,7 +2242,7 @@ object LogMetricNames {
 
 case class RetentionMsBreach(log: UnifiedLog) extends SegmentDeletionReason {
   override def logReason(toDelete: List[LogSegment]): Unit = {
-    val retentionMs = log.config.remoteLogConfig.localRetentionMs
+    val retentionMs = UnifiedLog.localRetentionMs(log.config)
     toDelete.foreach { segment =>
       segment.largestRecordTimestamp match {
         case Some(_) =>
@@ -2260,7 +2261,7 @@ case class RetentionSizeBreach(log: UnifiedLog) extends SegmentDeletionReason {
     var size = log.size
     toDelete.foreach { segment =>
       size -= segment.size
-      log.info(s"Deleting segment $segment due to local log retention size ${log.localRetentionSize} breach. Log size " +
+      log.info(s"Deleting segment $segment due to local log retention size ${UnifiedLog.localRetentionSize(log.config)} breach. Log size " +
         s"after deletion will be $size.")
     }
   }
