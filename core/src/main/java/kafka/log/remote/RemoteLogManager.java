@@ -1205,7 +1205,6 @@ public class RemoteLogManager implements Closeable {
             this.retentionSize = retentionSize;
             this.remainingBreachedSize = remainingBreachedSize;
         }
-
     }
 
     private static class RetentionTimeData {
@@ -1217,7 +1216,5 @@ public class RemoteLogManager implements Closeable {
             this.retentionMs = retentionMs;
             this.cleanupUntilMs = cleanupUntilMs;
         }
-
     }
-
 }
