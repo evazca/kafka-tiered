@@ -1749,18 +1749,18 @@ object UnifiedLog extends Logging {
 
   val TxnIndexFileSuffix = LogFileUtils.TXN_INDEX_FILE_SUFFIX
 
-  val CleanedFileSuffix = LocalLog.CleanedFileSuffix
+  val CleanedFileSuffix = LocalLog.CLEANED_FILE_SUFFIX
 
-  val SwapFileSuffix = LocalLog.SwapFileSuffix
+  val SwapFileSuffix = LocalLog.SWAP_FILE_SUFFIX
 
-  val DeleteDirSuffix = LocalLog.DeleteDirSuffix
+  val DeleteDirSuffix = LocalLog.DELETE_DIR_SUFFIX
 
-  val FutureDirSuffix = LocalLog.FutureDirSuffix
+  val FutureDirSuffix = LocalLog.FUTURE_DIR_SUFFIX
 
-  private[log] val DeleteDirPattern = LocalLog.DeleteDirPattern
-  private[log] val FutureDirPattern = LocalLog.FutureDirPattern
+  private[log] val DeleteDirPattern = LocalLog.DELETE_DIR_PATTERN
+  private[log] val FutureDirPattern = LocalLog.FUTURE_DIR_PATTERN
 
-  val UnknownOffset = LocalLog.UnknownOffset
+  val UnknownOffset = LocalLog.UNKNOWN_OFFSET
 
   def apply(dir: File,
             config: LogConfig,
