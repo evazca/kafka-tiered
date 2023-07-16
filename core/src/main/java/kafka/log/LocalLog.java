@@ -1,13 +1,13 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
+ * contributor license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+ * the License. You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,10 +37,11 @@ import org.apache.kafka.storage.internals.log.LogDirFailureChannel;
 import org.apache.kafka.storage.internals.log.LogFileUtils;
 import org.apache.kafka.storage.internals.log.LogOffsetMetadata;
 import org.apache.kafka.storage.internals.log.OffsetPosition;
+import org.apache.kafka.storage.internals.log.StorageAction;
 import org.apache.kafka.storage.internals.log.TxnIndexSearchResult;
 import org.slf4j.Logger;
 import scala.Option;
-import scala.jdk.CollectionConverters;
+import scala.collection.JavaConverters;
 
 import java.io.File;
 import java.io.IOException;
@@ -139,8 +140,8 @@ public class LocalLog {
                     LogConfig config,
                     LogSegments segments,
                     long recoveryPoint,
-                    Scheduler scheduler,
                     LogOffsetMetadata nextOffsetMetadata,
+                    Scheduler scheduler,
                     Time time,
                     TopicPartition topicPartition,
                     LogDirFailureChannel logDirFailureChannel) {
@@ -159,6 +160,46 @@ public class LocalLog {
         logPrefix = "[LocalLog partition=" + topicPartition + ", dir=" + dir + "] ";
         LogContext logContext = new LogContext(logPrefix);
         logger = logContext.logger(LocalLog.class);
+    }
+
+    Logger logger() {
+        return logger;
+    }
+
+    public LogConfig config() {
+        return config;
+    }
+
+    public LogSegments segments() {
+        return segments;
+    }
+
+    public Scheduler scheduler() {
+        return scheduler;
+    }
+
+    public LogOffsetMetadata nextOffsetMetadata() {
+        return nextOffsetMetadata;
+    }
+
+    public TopicPartition topicPartition() {
+        return topicPartition;
+    }
+
+    public LogDirFailureChannel logDirFailureChannel() {
+        return logDirFailureChannel;
+    }
+
+    public boolean isMemoryMappedBufferClosed() {
+        return isMemoryMappedBufferClosed;
+    }
+
+    long recoveryPoint() {
+        return recoveryPoint;
+    }
+
+    public Time time() {
+        return time;
     }
 
     /**
@@ -208,18 +249,20 @@ public class LocalLog {
      * @param name the new dir name
      * @throws KafkaStorageException if rename fails
      */
-    boolean renameDir(String name) throws IOException {
-//    maybeHandleIOException(s"Error while renaming dir for $topicPartition in log dir ${dir.getParent}") {
-        File renamedDir = new File(dir.getParent(), name);
-        Utils.atomicMoveWithFallback(dir.toPath(), renamedDir.toPath());
-        if (renamedDir != dir) {
-            dir = renamedDir;
-            parentDir = renamedDir.getParent();
-            segments.updateParentDir(renamedDir);
-            return true;
-        } else {
-            return false;
-        }
+    boolean renameDir(String name) {
+        return maybeHandleIOException("Error while renaming dir for " + topicPartition + " in log dir " + dir.getParent(),
+                () -> {
+                    File renamedDir = new File(dir.getParent(), name);
+                    Utils.atomicMoveWithFallback(dir.toPath(), renamedDir.toPath());
+                    if (!renamedDir.equals(dir)) {
+                        dir = renamedDir;
+                        parentDir = renamedDir.getParent();
+                        segments.updateParentDir(renamedDir);
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
     }
 
     /**
@@ -275,7 +318,7 @@ public class LocalLog {
     void flush(long offset) throws IOException {
         long currentRecoveryPoint = recoveryPoint;
         if (currentRecoveryPoint <= offset) {
-            Collection<LogSegment> segmentsToFlush = CollectionConverters.IterableHasAsJava(segments.values(currentRecoveryPoint, offset)).asJavaCollection();
+            Collection<LogSegment> segmentsToFlush = JavaConverters.asJavaCollection(segments.values(currentRecoveryPoint, offset));
             segmentsToFlush.forEach(LogSegment::flush);
             // If there are any new segments, we need to flush the parent directory for crash consistency.
             if (segmentsToFlush.stream().anyMatch(x -> x.baseOffset() >= currentRecoveryPoint))
@@ -309,27 +352,46 @@ public class LocalLog {
      * Closes the segments of the log.
      */
     void close() {
-//    maybeHandleIOException(s"Error while renaming dir for $topicPartition in dir ${dir.getParent}") {
-        checkIfMemoryMappedBufferClosed();
-        segments.close();
-//    }
+        maybeHandleIOException("Error while renaming dir for " + topicPartition + " in dir " + dir.getParent(),
+                (StorageAction<Void, IOException>) () -> {
+                    checkIfMemoryMappedBufferClosed();
+                    segments.close();
+                    return null;
+                });
     }
 
     /**
      * Completely delete this log directory with no delay.
      */
-    void deleteEmptyDir() throws IOException {
-//    maybeHandleIOException(s"Error while deleting dir for $topicPartition in dir ${dir.getParent}") {
-        if (segments.nonEmpty()) {
-            throw new IllegalStateException("Can not delete directory when ${segments.numberOfSegments} segments are still present");
-        }
-        if (!isMemoryMappedBufferClosed) {
-            throw new IllegalStateException("Can not delete directory when memory mapped buffer for log of $topicPartition is still open.");
-        }
-        Utils.delete(dir);
-//    }
+    void deleteEmptyDir() {
+        maybeHandleIOException("Error while deleting dir for " + topicPartition + " in dir " + dir.getParent(),
+                (StorageAction<Void, IOException>) () -> {
+                    if (segments.nonEmpty()) {
+                        throw new IllegalStateException("Can not delete directory when " + segments.numberOfSegments() + " segments are still present");
+                    }
+                    if (!isMemoryMappedBufferClosed) {
+                        throw new IllegalStateException("Can not delete directory when memory mapped buffer for log of " + topicPartition + " is still open.");
+                    }
+                    Utils.delete(dir);
+                    return null;
+                });
     }
 
+    /**
+     * Completely delete all segments with no delay.
+     *
+     * @return the deleted segments
+     */
+    Iterable<LogSegment> deleteAllSegments() {
+        return maybeHandleIOException("Error while deleting all segments for " + topicPartition + " in dir " + dir.getParent(),
+                () -> {
+                    Collection<LogSegment> allSegments = JavaConverters.asJavaCollection(segments.values());
+                    List<LogSegment> deletableSegments = new ArrayList<>(allSegments);
+                    removeAndDeleteSegments(allSegments, false, new LogDeletion(this.logger));
+                    isMemoryMappedBufferClosed = true;
+                    return deletableSegments;
+                });
+    }
 
     /**
      * Find segments starting from the oldest until the user-supplied predicate is false.
@@ -344,7 +406,7 @@ public class LocalLog {
             return Collections.emptyList();
         } else {
             ArrayList<LogSegment> deletable = new ArrayList<>();
-            Iterator<LogSegment> segmentsIterator = CollectionConverters.IterableHasAsJava(segments.values()).asJava().iterator();
+            Iterator<LogSegment> segmentsIterator = JavaConverters.asJavaCollection(segments.values()).iterator();
             Optional<LogSegment> segmentOpt = nextItem(segmentsIterator);
             while (segmentOpt.isPresent()) {
                 LogSegment segment = segmentOpt.get();
@@ -388,7 +450,7 @@ public class LocalLog {
             for (LogSegment segment : toDelete) {
                 segments.remove(segment.baseOffset());
             }
-            LocalLog.deleteSegmentFiles(toDelete, asyncDelete, dir, topicPartition, config, scheduler, logDirFailureChannel, logPrefix);
+            deleteSegmentFiles(toDelete, asyncDelete, dir, topicPartition, config, scheduler, logDirFailureChannel, logPrefix);
         }
     }
 
@@ -412,14 +474,21 @@ public class LocalLog {
             segmentToDelete.changeFileSuffixes("", LogFileUtils.DELETED_FILE_SUFFIX);
         }
 
-        LogSegment newSegment = LogSegment.open(dir, newOffset, config, time, false, config.initFileSize(), config.preallocate, "");
+        LogSegment newSegment = LogSegment.open(dir,
+                newOffset,
+                config,
+                time,
+                false,
+                config.initFileSize(),
+                config.preallocate,
+                 "");
         segments.add(newSegment);
 
         reason.logReason(Collections.singletonList(segmentToDelete));
         if (newOffset != segmentToDelete.baseOffset()) {
             segments.remove(segmentToDelete.baseOffset());
         }
-        segments.remove(segmentToDelete.baseOffset());
+
         deleteSegmentFiles(Collections.singletonList(segmentToDelete), asyncDelete, dir, topicPartition, config, scheduler, logDirFailureChannel, logPrefix);
 
         return newSegment;
@@ -447,48 +516,51 @@ public class LocalLog {
      * @throws OffsetOutOfRangeException If startOffset is beyond the log end offset
      */
     FetchDataInfo read(long startOffset, int maxLength, boolean minOneMessage, LogOffsetMetadata maxOffsetMetadata, boolean includeAbortedTxns) {
-//    maybeHandleIOException(s"Exception while reading from $topicPartition in dir ${dir.getParent}") {
-        logger.trace("Reading maximum $maxLength bytes at offset $startOffset from log with " + "total length ${segments.sizeInBytes} bytes");
+        return maybeHandleIOException("Exception while reading for " + topicPartition + " in dir " + dir.getParent(),
+                () -> {
+                    logger.trace("Reading maximum {} bytes at offset {} from log with total length {} bytes", maxLength, startOffset, segments.sizeInBytes());
 
-        LogOffsetMetadata endOffsetMetadata = nextOffsetMetadata;
-        long endOffset = endOffsetMetadata.messageOffset;
-        Option<LogSegment> segmentOpt = segments.floorSegment(startOffset);
+                    LogOffsetMetadata endOffsetMetadata = nextOffsetMetadata;
+                    long endOffset = endOffsetMetadata.messageOffset;
+                    Option<LogSegment> segmentOpt = segments.floorSegment(startOffset);
 
-        // return error on attempt to read beyond the log end offset
-        if (startOffset > endOffset || segmentOpt.isEmpty())
-            throw new OffsetOutOfRangeException("Received request for offset $startOffset for partition $topicPartition, " + "but we only have log segments upto $endOffset.");
+                    // return error on attempt to read beyond the log end offset
+                    if (startOffset > endOffset || segmentOpt.isEmpty())
+                        throw new OffsetOutOfRangeException("Received request for offset " + startOffset + " for partition " + topicPartition + ", but we only have log segments upto " + endOffset + ".");
 
-        if (startOffset == maxOffsetMetadata.messageOffset)
-            return emptyFetchDataInfo(maxOffsetMetadata, includeAbortedTxns);
-        else if (startOffset > maxOffsetMetadata.messageOffset)
-            return emptyFetchDataInfo(convertToOffsetMetadataOrThrow(startOffset), includeAbortedTxns);
-        else {
-            // Do the read on the segment with a base offset less than the target offset
-            // but if that segment doesn't contain any messages with an offset greater than that
-            // continue to read from successive segments until we get some messages or we reach the end of the log
-            FetchDataInfo fetchDataInfo = null;
-            while (fetchDataInfo == null && segmentOpt.isDefined()) {
-                LogSegment segment = segmentOpt.get();
-                long baseOffset = segment.baseOffset();
+                    if (startOffset == maxOffsetMetadata.messageOffset)
+                        return emptyFetchDataInfo(maxOffsetMetadata, includeAbortedTxns);
+                    else if (startOffset > maxOffsetMetadata.messageOffset)
+                        return emptyFetchDataInfo(convertToOffsetMetadataOrThrow(startOffset), includeAbortedTxns);
+                    else {
+                        // Do the read on the segment with a base offset less than the target offset
+                        // but if that segment doesn't contain any messages with an offset greater than that
+                        // continue to read from successive segments until we get some messages or we reach the end of the log
+                        FetchDataInfo fetchDataInfo = null;
+                        while (fetchDataInfo == null && segmentOpt.isDefined()) {
+                            LogSegment segment = segmentOpt.get();
+                            long baseOffset = segment.baseOffset();
 
-                int maxPosition =
-                        // Use the max offset position if it is on this segment; otherwise, the segment size is the limit.
-                        maxOffsetMetadata.segmentBaseOffset == segment.baseOffset() ? maxOffsetMetadata.relativePositionInSegment : segment.size();
+                            int maxPosition =
+                                    // Use the max offset position if it is on this segment; otherwise, the segment size is the limit.
+                                    maxOffsetMetadata.segmentBaseOffset == segment.baseOffset() ? maxOffsetMetadata.relativePositionInSegment : segment.size();
 
-                fetchDataInfo = segment.read(startOffset, maxLength, maxPosition, minOneMessage);
-                if (fetchDataInfo != null) {
-                    if (includeAbortedTxns) fetchDataInfo = addAbortedTransactions(startOffset, segment, fetchDataInfo);
-                } else segmentOpt = segments.higherSegment(baseOffset);
-            }
+                            fetchDataInfo = segment.read(startOffset, maxLength, maxPosition, minOneMessage);
+                            if (fetchDataInfo != null) {
+                                if (includeAbortedTxns)
+                                    fetchDataInfo = addAbortedTransactions(startOffset, segment, fetchDataInfo);
+                            } else segmentOpt = segments.higherSegment(baseOffset);
+                        }
 
-            if (fetchDataInfo != null) return fetchDataInfo;
-            else {
-                // okay we are beyond the end of the last segment with no data fetched although the start offset is in range,
-                // this can happen when all messages with offset larger than start offsets have been deleted.
-                // In this case, we will return the empty set with log end offset metadata
-                return new FetchDataInfo(nextOffsetMetadata, MemoryRecords.EMPTY);
-            }
-        }
+                        if (fetchDataInfo != null) return fetchDataInfo;
+                        else {
+                            // okay we are beyond the end of the last segment with no data fetched although the start offset is in range,
+                            // this can happen when all messages with offset larger than start offsets have been deleted.
+                            // In this case, we will return the empty set with log end offset metadata
+                            return new FetchDataInfo(nextOffsetMetadata, MemoryRecords.EMPTY);
+                        }
+                    }
+                });
     }
 
     void append(long lastOffset, long largestTimestamp, long shallowOffsetOfMaxTimestamp, MemoryRecords records) {
@@ -512,12 +584,15 @@ public class LocalLog {
 
         collectAbortedTransactions(startOffset, upperBoundOffset, segment, accumulator);
 
-        return new FetchDataInfo(fetchInfo.fetchOffsetMetadata, fetchInfo.records, fetchInfo.firstEntryIncomplete, Optional.of(abortedTransactions));
+        return new FetchDataInfo(fetchInfo.fetchOffsetMetadata,
+                fetchInfo.records,
+                fetchInfo.firstEntryIncomplete,
+                Optional.of(abortedTransactions));
     }
 
     void collectAbortedTransactions(long startOffset, long upperBoundOffset, LogSegment startingSegment, Consumer<List<AbortedTxn>> accumulator) {
-        Iterator<LogSegment> higherSegments = CollectionConverters.IterableHasAsJava
-                (segments.higherSegments(startingSegment.baseOffset())).asJava().iterator();
+        Iterator<LogSegment> higherSegments =
+                JavaConverters.asJavaCollection(segments.higherSegments(startingSegment.baseOffset())).iterator();
         Optional<LogSegment> segmentEntryOpt = Optional.of(startingSegment);
         while (segmentEntryOpt.isPresent()) {
             LogSegment segment = segmentEntryOpt.get();
@@ -547,53 +622,69 @@ public class LocalLog {
      * @return The newly rolled segment
      */
     LogSegment roll(Optional<Long> expectedNextOffset) {
-//    maybeHandleIOException(s"Error while rolling log segment for $topicPartition in dir ${dir.getParent}") {
-        long start = time.hiResClockMs();
-        checkIfMemoryMappedBufferClosed();
-        long newOffset = Math.max(expectedNextOffset.orElse(0L), logEndOffset());
-        File logFile = LogFileUtils.logFile(dir, newOffset, "");
-        LogSegment activeSegment = segments.activeSegment();
-        if (segments.contains(newOffset)) {
-            // segment with the same base offset already exists and loaded
-            if (activeSegment.baseOffset() == newOffset && activeSegment.size() == 0) {
-                // We have seen this happen (see KAFKA-6388) after shouldRoll() returns true for an
-                // active segment of size zero because of one of the indexes is "full" (due to _maxEntries == 0).
-                logger.warn("Trying to roll a new log segment with start offset $newOffset " + "=max(provided offset = $expectedNextOffset, LEO = $logEndOffset) while it already " + "exists and is active with size 0. Size of time index: ${activeSegment.timeIndex.entries}," + " size of offset index: ${activeSegment.offsetIndex.entries}.");
-                LogSegment newSegment = createAndDeleteSegment(newOffset, activeSegment, true, new LogRoll(this.logger));
-                updateLogEndOffset(nextOffsetMetadata.messageOffset);
-                logger.info("Rolled new log segment at offset $newOffset in ${time.hiResClockMs() - start} ms.");
-                return newSegment;
-            } else {
-                throw new KafkaException("Trying to roll a new log segment for topic partition $topicPartition with start offset $newOffset" + " =max(provided offset = $expectedNextOffset, LEO = $logEndOffset) while it already exists. Existing " + "segment is ${segments.get(newOffset)}.");
-            }
-        } else if (!segments.isEmpty() && newOffset < activeSegment.baseOffset()) {
-            throw new KafkaException("Trying to roll a new log segment for topic partition $topicPartition with " + "start offset $newOffset =max(provided offset = $expectedNextOffset, LEO = $logEndOffset) lower than start offset of the active segment $activeSegment");
-        } else {
-            File offsetIdxFile = LogFileUtils.offsetIndexFile(dir, newOffset);
-            File timeIdxFile = LogFileUtils.timeIndexFile(dir, newOffset);
-            File txnIdxFile = LogFileUtils.transactionIndexFile(dir, newOffset);
+        return maybeHandleIOException("Error while rolling log segment for " + topicPartition + " in dir " + dir.getParent(),
+                () -> {
 
-            for (File file : Arrays.asList(logFile, offsetIdxFile, timeIdxFile, txnIdxFile)) {
-                if (file.exists()) {
-                    logger.warn("Newly rolled segment file ${file.getAbsolutePath} already exists; deleting it first");
-                    Files.delete(file.toPath());
-                }
-            }
+                    long start = time.hiResClockMs();
+                    checkIfMemoryMappedBufferClosed();
+                    long newOffset = Math.max(expectedNextOffset.orElse(0L), logEndOffset());
+                    File logFile = LogFileUtils.logFile(dir, newOffset, "");
+                    LogSegment activeSegment = segments.activeSegment();
+                    if (segments.contains(newOffset)) {
+                        // segment with the same base offset already exists and loaded
+                        if (activeSegment.baseOffset() == newOffset && activeSegment.size() == 0) {
+                            // We have seen this happen (see KAFKA-6388) after shouldRoll() returns true for an
+                            // active segment of size zero because of one of the indexes is "full" (due to _maxEntries == 0).
+                            logger.warn("Trying to roll a new log segment with start offset {} =max(provided offset = {}, LEO = {}) while it already exists and is active with size 0. Size of time index: {}, size of offset index: {}.",
+                                    newOffset, expectedNextOffset, logEndOffset(), activeSegment.timeIndex().entries(), activeSegment.offsetIndex().entries());
+                            LogSegment newSegment = createAndDeleteSegment(newOffset, activeSegment, true, new LogRoll(this.logger));
+                            updateLogEndOffset(nextOffsetMetadata.messageOffset);
+                            logger.info("Rolled new log segment at offset {} in {} ms.", newOffset, time.hiResClockMs() - start);
+                            return newSegment;
+                        } else {
+                            throw new KafkaException("Trying to roll a new log segment for topic partition "
+                                    + topicPartition + " with start offset " + newOffset + " + =max(provided offset = "
+                                    + expectedNextOffset + ", LEO = " + logEndOffset() + " while it already exists. Existing segment is "
+                                    + segments.get(newOffset) + ".");
+                        }
+                    } else if (!segments.isEmpty() && newOffset < activeSegment.baseOffset()) {
+                        throw new KafkaException("Trying to roll a new log segment for topic partition " + topicPartition
+                                + " with start offset " + newOffset + " =max(provided offset = " + expectedNextOffset
+                                + ", LEO = " + logEndOffset() + ") lower than start offset of the active segment " + activeSegment);
+                    } else {
+                        File offsetIdxFile = LogFileUtils.offsetIndexFile(dir, newOffset);
+                        File timeIdxFile = LogFileUtils.timeIndexFile(dir, newOffset);
+                        File txnIdxFile = LogFileUtils.transactionIndexFile(dir, newOffset);
 
-            Option<LogSegment> logSegmentOption = segments.lastSegment();
-            if (logSegmentOption.isDefined()) logSegmentOption.get().onBecomeInactiveSegment();
-        }
+                        for (File file : Arrays.asList(logFile, offsetIdxFile, timeIdxFile, txnIdxFile)) {
+                            if (file.exists()) {
+                                logger.warn("Newly rolled segment file {} already exists; deleting it first", file.getAbsolutePath());
+                                Files.delete(file.toPath());
+                            }
+                        }
 
-        LogSegment newSegment = LogSegment.open(dir, newOffset, config, time, false, config.initFileSize(), config.preallocate, "");
-        segments.add(newSegment);
+                        Option<LogSegment> logSegmentOption = segments.lastSegment();
+                        if (logSegmentOption.isDefined()) logSegmentOption.get().onBecomeInactiveSegment();
+                    }
 
-        // We need to update the segment base offset and append position data of the metadata when log rolls.
-        // The next offset should not change.
-        updateLogEndOffset(nextOffsetMetadata.messageOffset);
+                    LogSegment newSegment = LogSegment.open(dir,
+                            newOffset,
+                            config,
+                            time,
+                            false,
+                            config.initFileSize(),
+                            config.preallocate,
+                            "");
+                    segments.add(newSegment);
 
-        logger.info("Rolled new log segment at offset $newOffset in ${time.hiResClockMs() - start} ms.");
+                    // We need to update the segment base offset and append position data of the metadata when log rolls.
+                    // The next offset should not change.
+                    updateLogEndOffset(nextOffsetMetadata.messageOffset);
 
-        return newSegment;
+                    logger.info("Rolled new log segment at offset {} in {} ms.", newOffset, time.hiResClockMs() - start);
+
+                    return newSegment;
+                });
     }
 
 
@@ -604,25 +695,29 @@ public class LocalLog {
      * @return the list of segments that were scheduled for deletion
      */
     Iterable<LogSegment> truncateFullyAndStartAt(long newOffset) {
-//    maybeHandleIOException(s"Error while truncating the entire log for $topicPartition in dir ${dir.getParent}") {
-        logger.debug("Truncate and start at offset $newOffset");
-        checkIfMemoryMappedBufferClosed();
-        List<LogSegment> segmentsToDelete = new ArrayList<>(CollectionConverters.IterableHasAsJava(segments.values())
-                .asJavaCollection());
+        return maybeHandleIOException("Error while truncating the entire log for " + topicPartition + " in dir " + dir.getParent(),
+                () -> {
+                    logger.debug("Truncate and start at offset {}", newOffset);
+                    checkIfMemoryMappedBufferClosed();
+                    List<LogSegment> logSegments = new ArrayList<>(JavaConverters.asJavaCollection(segments.values()));
 
-        if (!segmentsToDelete.isEmpty()) {
-            segmentsToDelete.remove(segmentsToDelete.size() - 1);
+                    if (!logSegments.isEmpty()) {
+                        // All segments except the last one.
+                        List<LogSegment> segmentsToDelete = new ArrayList<>(logSegments.size() - 1);
+                        for (int i = 0; i < logSegments.size() - 1; i++) {
+                            segmentsToDelete.add(logSegments.get(i));
+                        }
 
-            removeAndDeleteSegments(segmentsToDelete, true, new LogTruncation(this.logger));
-            // Use createAndDeleteSegment() to create new segment first and then delete the old last segment to prevent missing
-            // active segment during the deletion process
-            createAndDeleteSegment(newOffset, segmentsToDelete.get(segmentsToDelete.size() - 1), true, new LogTruncation(this.logger));
-        }
+                        removeAndDeleteSegments(segmentsToDelete, true, new LogTruncation(this.logger));
+                        // Use createAndDeleteSegment() to create new segment first and then delete the old last segment to prevent missing
+                        // active segment during the deletion process
+                        createAndDeleteSegment(newOffset, logSegments.get(logSegments.size() - 1), true, new LogTruncation(this.logger));
+                    }
 
-        updateLogEndOffset(newOffset);
+                    updateLogEndOffset(newOffset);
 
-        return segmentsToDelete;
-//    }
+                    return logSegments;
+                });
     }
 
     /**
@@ -633,8 +728,7 @@ public class LocalLog {
      */
     Iterable<LogSegment> truncateTo(long targetOffset) {
         List<LogSegment> deletableSegments =
-                new ArrayList<>(CollectionConverters.IterableHasAsJava(segments.filter(segment -> segment.baseOffset() > targetOffset))
-                        .asJavaCollection());
+                new ArrayList<>(JavaConverters.asJavaCollection(segments.filter(segment -> segment.baseOffset() > targetOffset)));
         removeAndDeleteSegments(deletableSegments, true, new LogTruncation(this.logger));
         segments.activeSegment().truncateTo(targetOffset);
         updateLogEndOffset(targetOffset);
@@ -694,16 +788,16 @@ public class LocalLog {
         if (dir == null) throw new KafkaException("dir should not be null");
 
         Function<File, KafkaException> exceptionFn
-                = file -> new KafkaException("Found directory ${dir.getCanonicalPath}, '${dir.getName}' is not in the form of topic-partition or topic-partition.uniqueId-delete (if marked for deletion).\n" + "Kafka's log directories (and children) should only contain Kafka topic data.");
+                = file -> new KafkaException("Found directory " + dir.getAbsolutePath() + ", '" + dir.getName() + "' is not in the form of topic-partition or topic-partition.uniqueId-delete (if marked for deletion).\n" + "Kafka's log directories (and children) should only contain Kafka topic data.");
 
         String dirName = dir.getName();
         if (dirName == null || dirName.isEmpty() || !dirName.contains("-"))
             throw exceptionFn.apply(dir);
 
-        if (dirName.endsWith(DELETE_DIR_SUFFIX)
-                && !DELETE_DIR_PATTERN.matcher(dirName).matches()
-                || dirName.endsWith(FUTURE_DIR_SUFFIX)
-                && !FUTURE_DIR_PATTERN.matcher(dirName).matches())
+        if ((dirName.endsWith(DELETE_DIR_SUFFIX)
+                && !DELETE_DIR_PATTERN.matcher(dirName).matches())
+                || (dirName.endsWith(FUTURE_DIR_SUFFIX)
+                && !FUTURE_DIR_PATTERN.matcher(dirName).matches()))
             throw exceptionFn.apply(dir);
 
         String name = dirName.endsWith(DELETE_DIR_SUFFIX) || dirName.endsWith(FUTURE_DIR_SUFFIX)
@@ -742,10 +836,23 @@ public class LocalLog {
     }
 
     static LogSegment createNewCleanedSegment(File dir, LogConfig logConfig, long baseOffset) {
-        LogSegment$.deleteIfExists(dir, scala.Long.unbox(baseOffset), CLEANED_FILE_SUFFIX);
-        return LogSegment.open(dir, baseOffset, logConfig, Time.SYSTEM, false, logConfig.initFileSize(), logConfig.preallocate, CLEANED_FILE_SUFFIX);
+        deleteIfExists(dir, baseOffset, CLEANED_FILE_SUFFIX);
+        return LogSegment.open(dir,
+                baseOffset,
+                logConfig,
+                Time.SYSTEM,
+                false,
+                logConfig.initFileSize(),
+                logConfig.preallocate,
+                CLEANED_FILE_SUFFIX);
     }
 
+    static void deleteIfExists(File dir, long baseOffset, String fileSuffix) {
+        UnifiedLog.deleteFileIfExists(LogFileUtils.offsetIndexFile(dir, baseOffset, fileSuffix), "");
+        UnifiedLog.deleteFileIfExists(LogFileUtils.timeIndexFile(dir, baseOffset, fileSuffix), "");
+        UnifiedLog.deleteFileIfExists(LogFileUtils.transactionIndexFile(dir, baseOffset, fileSuffix), "");
+        UnifiedLog.deleteFileIfExists(LogFileUtils.logFile(dir, baseOffset, fileSuffix), "");
+    }
 
     /**
      * Perform physical deletion of the index and log files for the given segment.
@@ -766,28 +873,30 @@ public class LocalLog {
      * @param logPrefix            The logging prefix
      * @throws IOException if the file can't be renamed and still exists
      */
-    void deleteSegmentFiles(Iterable<LogSegment> segmentsToDelete,
-                            boolean asyncDelete,
-                            File dir,
-                            TopicPartition topicPartition,
-                            LogConfig config,
-                            Scheduler scheduler,
-                            LogDirFailureChannel logDirFailureChannel,
-                            String logPrefix) {
+    static void deleteSegmentFiles(Iterable<LogSegment> segmentsToDelete,
+                                   boolean asyncDelete,
+                                   File dir,
+                                   TopicPartition topicPartition,
+                                   LogConfig config,
+                                   Scheduler scheduler,
+                                   LogDirFailureChannel logDirFailureChannel,
+                                   String logPrefix) {
         for (LogSegment segment : segmentsToDelete) {
             if (!segment.hasSuffix(LogFileUtils.DELETED_FILE_SUFFIX))
                 segment.changeFileSuffixes("", LogFileUtils.DELETED_FILE_SUFFIX);
         }
 
         Runnable deleteSegments = () -> {
-            logger.info("{} Deleting segment files {}", logPrefix, mkString(segmentsToDelete.iterator(), ", "));
+            //todo-current-pr
+            //logger.info("{} Deleting segment files {}", logPrefix, mkString(segmentsToDelete.iterator(), ", "));
             String parentDir = dir.getParent();
-//      maybeHandleIOException(logDirFailureChannel, parentDir, s"Error while deleting segments for $topicPartition in dir $parentDir") {
-            for (LogSegment segment : segmentsToDelete) {
-                segment.deleteIfExists();
-            }
-//      }
-
+            maybeHandleIOException(logDirFailureChannel, parentDir, "Error while deleting segments for " + topicPartition + " in dir " + parentDir,
+                    () -> {
+                        for (LogSegment segment : segmentsToDelete) {
+                            segment.deleteIfExists();
+                        }
+                        return null;
+                    });
         };
 
         if (asyncDelete) scheduler.scheduleOnce("delete-file", deleteSegments, config.fileDeleteDelayMs);
@@ -832,16 +941,16 @@ public class LocalLog {
      * @param logPrefix            The logging prefix
      * @param isRecoveredSwapFile  true if the new segment was created from a swap file during recovery after a crash
      */
-    List<LogSegment> replaceSegments(LogSegments existingSegments,
-                                     List<LogSegment> newSegments,
-                                     List<LogSegment> oldSegments,
-                                     File dir,
-                                     TopicPartition topicPartition,
-                                     LogConfig config,
-                                     Scheduler scheduler,
-                                     LogDirFailureChannel logDirFailureChannel,
-                                     String logPrefix,
-                                     boolean isRecoveredSwapFile) throws IOException {
+    static List<LogSegment> replaceSegments(LogSegments existingSegments,
+                                            List<LogSegment> newSegments,
+                                            List<LogSegment> oldSegments,
+                                            File dir,
+                                            TopicPartition topicPartition,
+                                            LogConfig config,
+                                            Scheduler scheduler,
+                                            LogDirFailureChannel logDirFailureChannel,
+                                            String logPrefix,
+                                            boolean isRecoveredSwapFile) throws IOException {
         List<LogSegment> sortedNewSegments = new ArrayList<>(newSegments);
         newSegments.sort(Comparator.comparingLong(LogSegment::baseOffset));
         // Some old segments may have been removed from index and scheduled for async deletion after the caller reads segments
@@ -908,18 +1017,18 @@ public class LocalLog {
      * @param logPrefix            The logging prefix
      * @return List of new segments that replace the input segment
      */
-    SplitSegmentResult splitOverflowedSegment(LogSegment segment,
-                                              LogSegments existingSegments,
-                                              File dir,
-                                              TopicPartition topicPartition,
-                                              LogConfig config,
-                                              Scheduler scheduler,
-                                              LogDirFailureChannel logDirFailureChannel,
-                                              String logPrefix) throws IOException {
+    static SplitSegmentResult splitOverflowedSegment(LogSegment segment,
+                                                     LogSegments existingSegments,
+                                                     File dir,
+                                                     TopicPartition topicPartition,
+                                                     LogConfig config,
+                                                     Scheduler scheduler,
+                                                     LogDirFailureChannel logDirFailureChannel,
+                                                     String logPrefix) throws IOException {
 //    require(isLogFile(segment.log.file), s"Cannot split file ${segment.log.file.getAbsoluteFile}")
 //    require(segment.hasOverflow, s"Split operation is only permitted for segments with overflow, and the problem path is ${segment.log.file.getAbsoluteFile}")
-//
-        logger.info("${logPrefix}Splitting overflowed segment $segment");
+        //todo-current-pr
+//        logger.info("${logPrefix}Splitting overflowed segment $segment");
 
         List<LogSegment> newSegments = new ArrayList<>();
 
@@ -934,7 +1043,7 @@ public class LocalLog {
 
                 int bytesAppended = newSegment.appendFromFile(sourceRecords, position);
                 if (bytesAppended == 0)
-                    throw new IllegalStateException("Failed to append records from position $position in $segment");
+                    throw new IllegalStateException("Failed to append records from position " + position + " in " + segment);
                 position += bytesAppended;
             }
 
@@ -943,16 +1052,17 @@ public class LocalLog {
             for (LogSegment splitSegment : newSegments) {
                 splitSegment.onBecomeInactiveSegment();
                 splitSegment.flush();
-                splitSegment.lastModified_$eq((segment.lastModified()));
+                splitSegment.lastModified_$eq(segment.lastModified());
                 totalSizeOfNewSegments += splitSegment.log().sizeInBytes();
             }
             // size of all the new segments combined must equal size of the original segment
             if (totalSizeOfNewSegments != segment.log().sizeInBytes())
                 throw new IllegalStateException("Inconsistent segment sizes after split" +
-                        " before: ${segment.log.sizeInBytes} after: $totalSizeOfNewSegments");
+                        " before: " + segment.log().sizeInBytes() + " after: " + totalSizeOfNewSegments);
 
             // replace old segment with new ones
-            logger.info("${logPrefix}Replacing overflowed segment $segment with split segments $newSegments");
+            //todo-current-pr
+//            logger.info("${logPrefix}Replacing overflowed segment $segment with split segments $newSegments");
 
             List<LogSegment> deletedSegments = replaceSegments(existingSegments, newSegments,
                     Collections.singletonList(segment), dir, topicPartition, config, scheduler,
@@ -976,43 +1086,34 @@ public class LocalLog {
         return joiner.toString();
     }
 
+    public <T> T maybeHandleIOException(String errorMsg,
+                                        StorageAction<T, IOException> func) {
+        return maybeHandleIOException(logDirFailureChannel, parentDir, errorMsg, func);
+    }
+
+    /**
+     * Invokes the provided function and handles any IOException raised by the function by marking the
+     * provided directory offline.
+     *
+     * @param logDirFailureChannel Used to asynchronously handle log directory failure.
+     * @param logDir               The log directory to be marked offline during an IOException.
+     * @param errorMsg             The error message to be used when marking the log directory offline.
+     * @param func                 The function to be executed.
+     * @return The value returned by the function after a successful invocation
+     */
+    public static <T> T maybeHandleIOException(LogDirFailureChannel logDirFailureChannel,
+                                               String logDir,
+                                               String errorMsg,
+                                               StorageAction<T, IOException> func) {
+        if (logDirFailureChannel.hasOfflineLogDir(logDir)) {
+            throw new KafkaStorageException("The log dir " + logDir + " is already offline due to a previous IO exception.");
+        }
+        try {
+            return func.execute();
+        } catch (IOException ioe) {
+            logDirFailureChannel.maybeAddOfflineLogDir(logDir, errorMsg, ioe);
+            throw new KafkaStorageException(errorMsg, ioe);
+        }
+    }
+
 }
-
-//  private def maybeHandleIOException[T](msg: => String)(fun: => T): T = {
-//    LocalLog.maybeHandleIOException(logDirFailureChannel, parentDir, msg) {
-//      fun
-//    }
-//  }
-
-
-///**
-// * Helper functions for logs
-// */
-//object LocalLog extends Logging {
-//
-
-//  /**
-//   * Invokes the provided function and handles any IOException raised by the function by marking the
-//   * provided directory offline.
-//   *
-//   * @param logDirFailureChannel Used to asynchronously handle log directory failure.
-//   * @param logDir The log directory to be marked offline during an IOException.
-//   * @param errorMsg The error message to be used when marking the log directory offline.
-//   * @param fun The function to be executed.
-//   * @return The value returned by the function after a successful invocation
-//   */
-//  private[log] def maybeHandleIOException[T](logDirFailureChannel: LogDirFailureChannel,
-//                                             logDir: String,
-//                                             errorMsg: => String)(fun: => T): T = {
-//    if (logDirFailureChannel.hasOfflineLogDir(logDir)) {
-//      throw new KafkaStorageException(s"The log dir $logDir is already offline due to a previous IO exception.")
-//    }
-//    try {
-//      fun
-//    } catch {
-//      case e: IOException =>
-//        logDirFailureChannel.maybeAddOfflineLogDir(logDir, errorMsg, e)
-//        throw new KafkaStorageException(errorMsg, e)
-//    }
-//  }
-

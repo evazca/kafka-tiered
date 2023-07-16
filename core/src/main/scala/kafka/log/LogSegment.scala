@@ -679,12 +679,6 @@ object LogSegment {
       time)
   }
 
-  def deleteIfExists(dir: File, baseOffset: Long, fileSuffix: String = ""): Unit = {
-    UnifiedLog.deleteFileIfExists(UnifiedLog.offsetIndexFile(dir, baseOffset, fileSuffix))
-    UnifiedLog.deleteFileIfExists(UnifiedLog.timeIndexFile(dir, baseOffset, fileSuffix))
-    UnifiedLog.deleteFileIfExists(UnifiedLog.transactionIndexFile(dir, baseOffset, fileSuffix))
-    UnifiedLog.deleteFileIfExists(UnifiedLog.logFile(dir, baseOffset, fileSuffix))
-  }
 }
 
 object LogFlushStats {

@@ -32,15 +32,15 @@ import org.apache.kafka.common.requests.OffsetsForLeaderEpochResponse.UNDEFINED_
 import org.apache.kafka.common.requests.ProduceResponse.RecordError
 import org.apache.kafka.common.utils.{PrimitiveRef, Time, Utils}
 import org.apache.kafka.common.{InvalidRecordException, KafkaException, TopicPartition, Uuid}
-import org.apache.kafka.server.common.{MetadataVersion, OffsetAndEpoch}
 import org.apache.kafka.server.common.MetadataVersion.IBP_0_10_0_IV0
+import org.apache.kafka.server.common.{MetadataVersion, OffsetAndEpoch}
 import org.apache.kafka.server.log.remote.metadata.storage.TopicBasedRemoteLogMetadataManagerConfig
 import org.apache.kafka.server.metrics.KafkaMetricsGroup
 import org.apache.kafka.server.record.BrokerCompressionType
 import org.apache.kafka.server.util.Scheduler
 import org.apache.kafka.storage.internals.checkpoint.LeaderEpochCheckpointFile
 import org.apache.kafka.storage.internals.epoch.LeaderEpochFileCache
-import org.apache.kafka.storage.internals.log.{AbortedTxn, AppendOrigin, BatchMetadata, CompletedTxn, EpochEntry, FetchDataInfo, FetchIsolation, LastRecord, LeaderHwChange, LogAppendInfo, LogConfig, LogDirFailureChannel, LogFileUtils, LogOffsetMetadata, LogOffsetSnapshot, LogOffsetsListener, LogStartOffsetIncrementReason, LogValidator, ProducerAppendInfo, ProducerStateManager, ProducerStateManagerConfig, RollParams}
+import org.apache.kafka.storage.internals.log.{AbortedTxn, AppendOrigin, BatchMetadata, CompletedTxn, EpochEntry, FetchDataInfo, FetchIsolation, LastRecord, LeaderHwChange, LogAppendInfo, LogConfig, LogDirFailureChannel, LogFileUtils, LogOffsetMetadata, LogOffsetSnapshot, LogOffsetsListener, LogStartOffsetIncrementReason, LogValidator, ProducerAppendInfo, ProducerStateManager, ProducerStateManagerConfig, RollParams, StorageAction}
 
 import java.io.{File, IOException}
 import java.nio.file.Files
@@ -1153,7 +1153,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   }
 
   private[log] def collectAbortedTransactions(startOffset: Long, upperBoundOffset: Long): List[AbortedTxn] = {
-    localLog.collectAbortedTransactions(logStartOffset, startOffset, upperBoundOffset)
+    localLog.collectAbortedTransactions(logStartOffset, startOffset, upperBoundOffset).asScala.toList
   }
 
   /**
@@ -1330,12 +1330,13 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    */
   private def deleteOldSegments(predicate: (LogSegment, Option[LogSegment]) => Boolean,
                                 reason: SegmentDeletionReason): Int = {
-    def shouldDelete(segment: LogSegment, nextSegmentOpt: Option[LogSegment]): Boolean = {
-      highWatermark >= nextSegmentOpt.map(_.baseOffset).getOrElse(localLog.logEndOffset) &&
-        predicate(segment, nextSegmentOpt)
+    def shouldDelete(segment: LogSegment, nextSegmentOpt: Optional[LogSegment]): Boolean = {
+      highWatermark >= (if (nextSegmentOpt.isPresent) nextSegmentOpt.get().baseOffset else localLog.logEndOffset) &&
+        predicate(segment, nextSegmentOpt.asScala)
     }
+
     lock synchronized {
-      val deletable = localLog.deletableSegments(shouldDelete)
+      val deletable = localLog.deletableSegments(shouldDelete).asScala
       if (deletable.nonEmpty)
         deleteSegments(deletable, reason)
       else
@@ -1358,7 +1359,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         }
         localLog.checkIfMemoryMappedBufferClosed()
         // remove the segments for lookups
-        localLog.removeAndDeleteSegments(segmentsToDelete, asyncDelete = true, reason)
+        localLog.removeAndDeleteSegments(segmentsToDelete.toList.asJava,  true, reason)
         deleteProducerSnapshots(deletable, asyncDelete = true)
         maybeIncrementLogStartOffset(localLog.segments.firstSegmentBaseOffset.get, LogStartOffsetIncrementReason.SegmentDeletion)
       }
@@ -1490,7 +1491,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * @return The newly rolled segment
    */
   def roll(expectedNextOffset: Option[Long] = None): LogSegment = lock synchronized {
-    val newSegment = localLog.roll(expectedNextOffset)
+    val newSegment = localLog.roll(expectedNextOffset.map(long2Long)asJava)
     // Take a snapshot of the producer state to facilitate recovery. It is useful to have the snapshot
     // offset align with the new segment offset since this ensures we can recover the segment by beginning
     // with the corresponding snapshot file and scanning the segment data. Because the segment base offset
@@ -1556,7 +1557,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
         producerExpireCheck.cancel(true)
         leaderEpochCache.foreach(_.clear())
         val deletedSegments = localLog.deleteAllSegments()
-        deleteProducerSnapshots(deletedSegments, asyncDelete = false)
+        deleteProducerSnapshots(deletedSegments.asScala, asyncDelete = false)
         localLog.deleteEmptyDir()
       }
     }
@@ -1612,7 +1613,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
           if (localLog.segments.firstSegmentBaseOffset.get > targetOffset) {
             truncateFullyAndStartAt(targetOffset)
           } else {
-            val deletedSegments = localLog.truncateTo(targetOffset)
+            val deletedSegments = localLog.truncateTo(targetOffset).asScala
             deleteProducerSnapshots(deletedSegments, asyncDelete = true)
             leaderEpochCache.foreach(_.truncateFromEnd(targetOffset))
             logStartOffset = math.min(targetOffset, logStartOffset)
@@ -1723,16 +1724,16 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   @threadsafe
   private[log] def addSegment(segment: LogSegment): LogSegment = localLog.segments.add(segment)
 
+
   private def maybeHandleIOException[T](msg: => String)(fun: => T): T = {
-    LocalLog.maybeHandleIOException(logDirFailureChannel, parentDir, msg) {
-      fun
-    }
+    def action: StorageAction[T, IOException] = () => fun
+    LocalLog.maybeHandleIOException(logDirFailureChannel, parentDir, msg, action);
   }
 
   private[log] def splitOverflowedSegment(segment: LogSegment): List[LogSegment] = lock synchronized {
     val result = UnifiedLog.splitOverflowedSegment(segment, localLog.segments, dir, topicPartition, config, scheduler, logDirFailureChannel, logIdent)
-    deleteProducerSnapshots(result.deletedSegments, asyncDelete = true)
-    result.newSegments.toList
+    deleteProducerSnapshots(result.deletedSegments.asScala, asyncDelete = true)
+    result.newSegments.asScala.toList
   }
 
   private[log] def deleteProducerSnapshots(segments: Iterable[LogSegment], asyncDelete: Boolean): Unit = {
@@ -1926,15 +1927,15 @@ object UnifiedLog extends Logging {
                                    logPrefix: String,
                                    isRecoveredSwapFile: Boolean = false): Iterable[LogSegment] = {
     LocalLog.replaceSegments(existingSegments,
-      newSegments,
-      oldSegments,
+      newSegments.asJava,
+      oldSegments.asJava,
       dir,
       topicPartition,
       config,
       scheduler,
       logDirFailureChannel,
       logPrefix,
-      isRecoveredSwapFile)
+      isRecoveredSwapFile).asScala
   }
 
   private[log] def deleteSegmentFiles(segmentsToDelete: immutable.Iterable[LogSegment],
@@ -1945,7 +1946,7 @@ object UnifiedLog extends Logging {
                                       scheduler: Scheduler,
                                       logDirFailureChannel: LogDirFailureChannel,
                                       logPrefix: String): Unit = {
-    LocalLog.deleteSegmentFiles(segmentsToDelete, asyncDelete, dir, topicPartition, config, scheduler, logDirFailureChannel, logPrefix)
+    LocalLog.deleteSegmentFiles(segmentsToDelete.asJava, asyncDelete, dir, topicPartition, config, scheduler, logDirFailureChannel, logPrefix)
   }
 
   /**
@@ -2073,11 +2074,12 @@ object UnifiedLog extends Logging {
     def deleteProducerSnapshots(): Unit = {
       LocalLog.maybeHandleIOException(logDirFailureChannel,
         parentDir,
-        s"Error while deleting producer state snapshots for $topicPartition in dir $parentDir") {
+        s"Error while deleting producer state snapshots for $topicPartition in dir $parentDir", {
         snapshotsToDelete.foreach { snapshot =>
           snapshot.deleteIfExists()
         }
-      }
+          return;
+      })
     }
 
     if (asyncDelete)
@@ -2124,9 +2126,9 @@ object LogMetricNames {
 }
 
 case class RetentionMsBreach(log: UnifiedLog) extends SegmentDeletionReason {
-  override def logReason(toDelete: List[LogSegment]): Unit = {
+  override def logReason(toDelete: util.List[LogSegment]): Unit = {
     val retentionMs = log.config.retentionMs
-    toDelete.foreach { segment =>
+    toDelete.forEach { segment =>
       segment.largestRecordTimestamp match {
         case Some(_) =>
           log.info(s"Deleting segment $segment due to retention time ${retentionMs}ms breach based on the largest " +
@@ -2140,9 +2142,9 @@ case class RetentionMsBreach(log: UnifiedLog) extends SegmentDeletionReason {
 }
 
 case class RetentionSizeBreach(log: UnifiedLog) extends SegmentDeletionReason {
-  override def logReason(toDelete: List[LogSegment]): Unit = {
+  override def logReason(toDelete: util.List[LogSegment]): Unit = {
     var size = log.size
-    toDelete.foreach { segment =>
+    toDelete.forEach { segment =>
       size -= segment.size
       log.info(s"Deleting segment $segment due to retention size ${log.config.retentionSize} breach. Log size " +
         s"after deletion will be $size.")
@@ -2151,7 +2153,7 @@ case class RetentionSizeBreach(log: UnifiedLog) extends SegmentDeletionReason {
 }
 
 case class StartOffsetBreach(log: UnifiedLog) extends SegmentDeletionReason {
-  override def logReason(toDelete: List[LogSegment]): Unit = {
-    log.info(s"Deleting segments due to log start offset ${log.logStartOffset} breach: ${toDelete.mkString(",")}")
+  override def logReason(toDelete: util.List[LogSegment]): Unit = {
+    log.info(s"Deleting segments due to log start offset ${log.logStartOffset} breach: ${LocalLog.mkString(toDelete.iterator(), ",")}")
   }
 }
